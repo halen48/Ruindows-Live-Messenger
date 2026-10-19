@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('msn', {
   aiLogin: (id) => ipcRenderer.invoke('ai:login', id),
   aiRefresh: () => ipcRenderer.invoke('ai:refresh'),
   aiImportFirefox: () => ipcRenderer.invoke('ai:importFirefox'),
+  aiGoogleInFirefox: () => ipcRenderer.invoke('ai:googleInFirefox'),
+  onAiFirefoxLogin: (cb) => ipcRenderer.on('ai:firefoxLogin', (_e, r) => cb(r)),
   // Telegram login + lifecycle
   tgStatus: () => ipcRenderer.invoke('tg:status'),
   tgStartLogin: (opts) => ipcRenderer.invoke('tg:startLogin', opts),

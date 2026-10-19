@@ -617,6 +617,7 @@ ai.ensureDefaultGroup(AI_ORDER);
 ai.on('message', (msg) => deliverMessage(msg));
 ai.on('presence', (p) => broadcast('wa:presence', p));
 ai.on('roster', (r) => broadcast('ai:roster', r));
+ai.on('firefoxLogin', (r) => broadcast('ai:firefoxLogin', r));
 ai.on('groups', (g) => broadcast('ai:groups', g));
 ipcMain.handle('ai:groups', () => ai.getGroups());
 ipcMain.handle('ai:groupCreate', (_e, opts) => ai.createGroup(opts || {}));
@@ -638,6 +639,7 @@ ipcMain.handle('ai:setEnabled', (_e, ids) => {
 ipcMain.handle('ai:login', (_e, id) => ai.login(id));
 ipcMain.handle('ai:refresh', () => ai.refresh());
 ipcMain.handle('ai:importFirefox', () => ai.importFirefox().then((r) => r, (e) => ({ error: e?.message || String(e) })));
+ipcMain.handle('ai:googleInFirefox', () => ai.loginGoogleInFirefox().then((r) => r, (e) => ({ error: e?.message || String(e) })));
 ipcMain.on('ui:setStatus', (_e, status) => setMyStatus(status));
 // sync, so a chat window popped open by a message knows before it plays a sound
 ipcMain.on('ui:statusSync', (e) => { e.returnValue = myStatus; });

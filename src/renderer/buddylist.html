@@ -604,28 +604,51 @@
     ], e.clientX, e.clientY);
   }
 
-  async function importFirefoxLogin() {
-    const r = await window.msn.aiImportFirefox();
+  function ffDialog(html, buttons = [{ label: 'OK' }]) {
+    document.getElementById('ffDialog')?.remove();
     const overlay = document.createElement('div');
     overlay.className = 'xp-dialog-overlay';
-    const geminiOff = !r.error && !r.loggedIn.includes('Gemini');
-    const why = !geminiOff ? ''
-      : r.google === false
-        ? `<br><br>O Gemini ficou de fora: o Firefox (perfil ${escapeHtml(r.profile || '?')}) não está logado no Google. Entre no gmail.com pelo Firefox e tente de novo.`
-        : '<br><br>O login do Google veio do Firefox, mas o Gemini não aceitou. Abra gemini.google.com no Firefox uma vez e tente de novo.';
-    const msg = r.error
-      ? `Não deu para usar o login do Firefox: ${escapeHtml(r.error)}.`
-      : (r.loggedIn.length
-        ? `Pronto! Logado em: ${escapeHtml(r.loggedIn.join(', '))}.`
-        : 'Copiei o login do Firefox, mas nenhuma IA ficou logada. Entre nelas no Firefox e tente de novo.') + why;
+    overlay.id = 'ffDialog';
     overlay.innerHTML = `
       <div class="xp-dialog">
         <div class="xp-dialog-title">Login do Firefox</div>
-        <div class="xp-dialog-body"><img src="assets/wlm85/information.png" width="16" height="16"><div>${msg}</div></div>
-        <div class="xp-dialog-buttons"><button class="wlm-button">OK</button></div>
+        <div class="xp-dialog-body"><img src="assets/wlm85/information.png" width="16" height="16"><div>${html}</div></div>
+        <div class="xp-dialog-buttons"></div>
       </div>`;
-    overlay.querySelector('button').addEventListener('click', () => overlay.remove());
+    for (const b of buttons) {
+      const btn = Object.assign(document.createElement('button'), { className: 'wlm-button', textContent: b.label });
+      btn.addEventListener('click', () => { overlay.remove(); b.action?.(); });
+      overlay.querySelector('.xp-dialog-buttons').append(btn);
+    }
     document.body.appendChild(overlay);
+  }
+
+  function ffResult(r) {
+    if (r.error) return ffDialog(`Não deu para usar o login do Firefox: ${escapeHtml(r.error)}.`);
+    const ok = r.loggedIn.length ? `Pronto! Logado em: ${escapeHtml(r.loggedIn.join(', '))}.` : 'Copiei o login do Firefox, mas nenhuma IA ficou logada.';
+    if (r.loggedIn.includes('Gemini')) return ffDialog(ok);
+    if (r.google === false) {
+      // no Google session in Firefox: log in there (Google allows it in Firefox)
+      return ffDialog(`${ok}<br><br>O Gemini ficou de fora porque o Firefox não está logado no Google.<br>Clique abaixo: eu abro o Firefox no login do Google e, assim que você entrar lá, puxo o login sozinho.`, [
+        { label: 'Entrar no Google pelo Firefox', action: googleInFirefox },
+        { label: 'Agora não' },
+      ]);
+    }
+    ffDialog(`${ok}<br><br>O login do Google veio do Firefox, mas o Gemini não aceitou. Abra gemini.google.com no Firefox uma vez e tente de novo.`, [
+      { label: 'Abrir o Gemini no Firefox', action: googleInFirefox },
+      { label: 'OK' },
+    ]);
+  }
+
+  async function googleInFirefox() {
+    const r = await window.msn.aiGoogleInFirefox();
+    if (r?.error) return ffDialog(`Não deu: ${escapeHtml(r.error)}.`);
+    ffDialog('Abri o Firefox no login do Google. Entre com a sua conta lá; assim que entrar, o Gemini loga aqui sozinho (fico esperando até 10 minutos).');
+  }
+  window.msn.onAiFirefoxLogin?.(ffResult);
+
+  async function importFirefoxLogin() {
+    ffResult(await window.msn.aiImportFirefox());
   }
 
   // ---- AI group chats: several AIs in one window ----------------------------

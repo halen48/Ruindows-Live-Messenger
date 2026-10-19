@@ -50,11 +50,45 @@ function cookieFiles() {
   return found.sort((a, b) => b.mtime - a.mtime);
 }
 
+/**
+ * Firefox writes new cookies (a login made a minute ago) to cookies.sqlite-wal
+ * first and only folds them into cookies.sqlite later, so reading the main
+ * file alone misses them. sql.js can't read a WAL, so its committed pages are
+ * applied to an in-memory copy of the database here.
+ */
+function withWal(db, wal) {
+  if (!wal || wal.length < 32) return db;
+  const magic = wal.readUInt32BE(0);
+  if (magic !== 0x377f0682 && magic !== 0x377f0683) return db;
+  const pageSize = wal.readUInt32BE(8);
+  const salt1 = wal.readUInt32BE(16), salt2 = wal.readUInt32BE(20);
+  const frame = 24 + pageSize;
+  const pages = new Map();
+  let committed = new Map(), dbPages = 0;
+  for (let off = 32; off + frame <= wal.length; off += frame) {
+    // frames from an older generation of the WAL end the valid part
+    if (wal.readUInt32BE(off + 8) !== salt1 || wal.readUInt32BE(off + 12) !== salt2) break;
+    pages.set(wal.readUInt32BE(off), wal.subarray(off + 24, off + frame));
+    const size = wal.readUInt32BE(off + 4);
+    if (size) { committed = new Map(pages); dbPages = size; } // commit frame
+  }
+  if (!dbPages) return db;
+  const out = Buffer.alloc(dbPages * pageSize);
+  db.copy(out, 0, 0, Math.min(db.length, out.length));
+  for (const [pgno, data] of committed) if (pgno <= dbPages) data.copy(out, (pgno - 1) * pageSize);
+  // mark it as a plain (non-WAL) database so sql.js opens it
+  out[18] = 1;
+  out[19] = 1;
+  return out;
+}
+
 async function readCookies(file) {
   const initSqlJs = require('sql.js');
   const SQL = await initSqlJs({ locateFile: (f) => path.join(path.dirname(require.resolve('sql.js')), f) });
   // read into memory: Firefox may have the file open, and nothing is copied to disk
-  const db = new SQL.Database(fs.readFileSync(file));
+  let wal = null;
+  try { wal = fs.readFileSync(file + '-wal'); } catch {}
+  const db = new SQL.Database(withWal(fs.readFileSync(file), wal));
   try {
     const where = DOMAINS.map(() => 'host LIKE ?').join(' OR ');
     const stmt = db.prepare(`SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite, originAttributes FROM moz_cookies WHERE (${where})`);
@@ -77,6 +111,8 @@ async function readCookies(file) {
  * unpartitioned cookies, from the default jar, or from the container that
  * actually holds the Google login if the default one doesn't.
  */
+const hasGoogle = (list) => list.some((r) => /google\.com$/.test(r.host) && /^(__Secure-[13]PSID|SID)$/.test(r.name));
+
 function pickJar(rows) {
   const jars = new Map();
   for (const r of rows) {
@@ -85,7 +121,7 @@ function pickJar(rows) {
     if (!jars.has(oa)) jars.set(oa, []);
     jars.get(oa).push(r);
   }
-  const loggedIn = (list) => list.some((r) => /google\.com$/.test(r.host) && /^(__Secure-[13]PSID|SID)$/.test(r.name));
+  const loggedIn = hasGoogle;
   const def = jars.get('') || [];
   if (loggedIn(def) || jars.size <= 1) return def;
   const withGoogle = [...jars.entries()].filter(([, list]) => loggedIn(list));
@@ -140,10 +176,40 @@ async function importFirefoxLogin(session) {
       }
     }
     await session.cookies.flushStore();
-    const google = rows.some((r) => /google\.com$/.test(r.host) && /^(__Secure-[13]PSID|SID)$/.test(r.name));
+    const google = hasGoogle(rows);
     return { copied, profile, google, failed: failed.length };
   }
   throw new Error('o Firefox não tem login no Google nem nessas IAs');
 }
 
-module.exports = { importFirefoxLogin };
+/** Whether the most recent Firefox profile is logged in to Google (reads only, copies nothing). */
+async function firefoxHasGoogle() {
+  const [latest] = cookieFiles();
+  if (!latest) return false;
+  try { return hasGoogle(pickJar(await readCookies(latest.file))); } catch { return false; }
+}
+
+/**
+ * Open Google's sign-in in Firefox itself (where Google allows it). Tries the
+ * usual ways Firefox is installed; resolves false if none starts.
+ */
+function openFirefox(url) {
+  const { spawn } = require('child_process');
+  const tries = process.platform === 'win32'
+    ? [['cmd', ['/c', 'start', 'firefox', url]]]
+    : process.platform === 'darwin'
+      ? [['open', ['-a', 'Firefox', url]]]
+      : [['firefox', [url]], ['flatpak', ['run', 'org.mozilla.firefox', url]], ['snap', ['run', 'firefox', url]]];
+  return new Promise((resolve) => {
+    const next = (i) => {
+      if (i >= tries.length) return resolve(false);
+      const [cmd, args] = tries[i];
+      const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+      child.once('error', () => next(i + 1));
+      child.once('spawn', () => { child.unref(); resolve(true); });
+    };
+    next(0);
+  });
+}
+
+module.exports = { importFirefoxLogin, firefoxHasGoogle, openFirefox, withWal };

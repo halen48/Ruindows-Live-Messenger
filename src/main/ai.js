@@ -18,7 +18,7 @@ const { ClaudeCode } = require('./claude-code');
  * expect to adjust selectors when a site changes.
  */
 const { BrowserWindow, session } = require('electron');
-const { importFirefoxLogin } = require('./firefox-login');
+const { importFirefoxLogin, firefoxHasGoogle, openFirefox } = require('./firefox-login');
 const { EventEmitter } = require('events');
 
 // all AI sites share one browser session, so signing in to Google (or any
@@ -456,6 +456,39 @@ class AiService extends EventEmitter {
     for (const win of this.wins.values()) if (!win.isDestroyed() && !win.isVisible()) win.loadURL('about:blank').catch(() => {});
     await this.refresh();
     return { ...result, loggedIn: this.getRoster().filter((p) => p.loggedIn).map((p) => p.name) };
+  }
+
+  /**
+   * Firefox isn't logged in to Google: open Google's sign-in in Firefox (where
+   * Google allows it), watch Firefox's cookies, and as soon as the login shows
+   * up, bring it in. Emits 'firefoxLogin' with the import result (or an error).
+   */
+  async loginGoogleInFirefox() {
+    if (this.ffWatch) return { watching: true };
+    const url = 'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fgemini.google.com%2Fapp';
+    if (!(await openFirefox(url))) throw new Error('não consegui abrir o Firefox');
+    const started = Date.now();
+    this.ffWatch = setInterval(async () => {
+      if (this.ffBusy) return;
+      this.ffBusy = true;
+      try {
+        if (await firefoxHasGoogle()) {
+          this.stopFirefoxWatch();
+          this.emit('firefoxLogin', await this.importFirefox().catch((e) => ({ error: e?.message || String(e) })));
+        } else if (Date.now() - started > 10 * 60 * 1000) {
+          this.stopFirefoxWatch();
+          this.emit('firefoxLogin', { error: 'passaram 10 minutos e o Firefox não entrou no Google' });
+        }
+      } finally {
+        this.ffBusy = false;
+      }
+    }, 3000);
+    return { watching: true };
+  }
+
+  stopFirefoxWatch() {
+    clearInterval(this.ffWatch);
+    this.ffWatch = null;
   }
 
   /** Re-check login and reload the conversation list for one or all providers. */

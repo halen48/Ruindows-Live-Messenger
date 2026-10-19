@@ -127,6 +127,8 @@
   #replyBar .rb-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #replyBar .rb-close { cursor: pointer; padding: 0 4px; color: #6d6d6d; }
   #replyBar .rb-close:hover { color: #c00; }
+  a.link { color: #0066cc; text-decoration: underline; cursor: pointer; word-break: break-all; }
+  a.link:hover { color: #3399ff; }
 
   /* pictures/files waiting to be sent (Ctrl+V, drop, "Enviar arquivo") */
   #attachBar { display: flex; gap: 6px; padding: 5px 6px; border: 1px solid #c5d3e3; border-bottom: 0; background: #eef3f9; overflow-x: auto; }
@@ -1064,6 +1066,14 @@
     pick.addEventListener('change', () => addAttachments([...pick.files]));
     pick.click();
   }
+
+  // links in messages open in the default browser
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest?.('a.link');
+    if (!a) return;
+    e.preventDefault();
+    window.msn.openExternal(a.href);
+  });
 
   // ---- attachments: Ctrl+V / drop / "Enviar arquivo" queue up here with a
   // preview, like the MSN file tray; Enter sends them all. Pictures can be

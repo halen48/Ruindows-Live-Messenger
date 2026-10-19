@@ -739,7 +739,7 @@ ipcMain.on('ui:maximize', (e) => {
 });
 ipcMain.on('ui:close', (e) => BrowserWindow.fromWebContents(e.sender)?.close());
 ipcMain.on('ui:openExternal', (_e, url) => {
-  if (/^https:\/\//.test(url)) return shell.openExternal(url);
+  if (/^https?:\/\//i.test(url)) return shell.openExternal(url);
   // downloaded chat photos/videos open in the system viewer
   if (/^file:\/\//.test(url) && wa?.mediaDir) {
     const file = require('url').fileURLToPath(url);
@@ -807,6 +807,22 @@ ipcMain.handle('tg:submitPassword', (_e, pw) => tg.submitPassword(pw));
 ipcMain.handle('tg:logout', () => tg.logout());
 
 // ---- App lifecycle ------------------------------------------------------
+
+// the app's own windows (file://) never browse: links go to the default browser.
+// The AI windows load real sites and keep their own navigation.
+app.on('web-contents-created', (_e, contents) => {
+  const own = () => { try { return contents.getURL().startsWith('file:'); } catch { return false; } };
+  contents.on('will-navigate', (e, url) => {
+    if (!own() || !/^https?:\/\//i.test(url)) return;
+    e.preventDefault();
+    shell.openExternal(url);
+  });
+  contents.setWindowOpenHandler(({ url }) => {
+    if (!own()) return { action: 'allow' };
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+});
 
 app.whenReady().then(async () => {
   if (process.platform === 'darwin') { try { app.dock.setIcon(APP_ICON); } catch {} }

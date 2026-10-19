@@ -153,7 +153,39 @@ function emojiText(s) {
   return html + escapeHtmlText(String(s).slice(last));
 }
 
+// links: http(s)://... or www....
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"]+/gi;
+// "veja x.com." / "(x.com)": trailing punctuation isn't part of the link, but
+// a ")" closing a "(" inside it is (Wikipedia's "..._(software)")
+function trimUrl(url) {
+  let tail = '';
+  for (;;) {
+    const c = url[url.length - 1];
+    const unbalanced = c === ')' && (url.match(/\(/g) || []).length < (url.match(/\)/g) || []).length;
+    if (!/[.,;:!?'"*_~\]}]/.test(c) && !unbalanced) break;
+    tail = c + tail;
+    url = url.slice(0, -1);
+  }
+  return [url, tail];
+}
+const escAttr = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 function messageHtml(text) {
+  // pull the links out first so emoticons (":/" in "https://") and *bold*/_italic_
+  // don't mangle them, then put them back as clickable anchors
+  const links = [];
+  text = String(text).replace(URL_RE, (raw) => {
+    const [url, tail] = trimUrl(raw);
+    return `\u0000${links.push(url) - 1}\u0000${tail}`;
+  });
+  return formatHtml(text).replace(/\u0000(\d+)\u0000/g, (_, i) => {
+    const url = links[i];
+    const href = /^www\./i.test(url) ? `https://${url}` : url;
+    return `<a class="link" href="${escAttr(href)}" title="${escAttr(href)}">${escAttr(url)}</a>`;
+  });
+}
+
+function formatHtml(text) {
   let html = '';
   let last = 0;
   for (const m of String(text).matchAll(EMO_TOKEN_RE)) {

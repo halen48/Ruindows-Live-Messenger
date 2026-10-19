@@ -188,7 +188,7 @@ Dentro da pasta de dados:
 | `wa-data/store.json` | Conversas, contatos, mensagens (200 por conversa), status, títulos, figurinhas favoritas |
 | `wa-data/sync.log` | Quando a sincronização dá ruim |
 | `wlm-settings.json` | Nick, mensagem, fotos, capa, fonte, status, tema, opções, IAs |
-| `Partitions/ai-*` | Login de cada IA |
+| `Partitions/ai` | Login das IAs (uma sessão só pra todas) |
 
 **Não coloque a pasta de dados no temp.** O zap só manda o histórico completo
 uma vez, quando você lê o QR. Perdeu, perdeu.

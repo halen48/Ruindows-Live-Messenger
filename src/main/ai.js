@@ -20,15 +20,17 @@ const { ClaudeCode } = require('./claude-code');
 const { BrowserWindow } = require('electron');
 const { EventEmitter } = require('events');
 
-const CHROME_UA =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
+// a plain Chrome identity (no "Electron"), with the version this build really
+// runs: bot checks compare it with the browser's own client hints
+const CHROME_PLATFORM = process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'X11; Linux x86_64';
+const CHROME_UA = `Mozilla/5.0 (${CHROME_PLATFORM}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${(process.versions.chrome || '130').split('.')[0]}.0.0.0 Safari/537.36`;
 
 // Google refuses to sign in inside embedded browsers ("Esse navegador ou app
 // pode não ser seguro") but lets Firefox through. Its login requests go out
 // with a Firefox user agent; the page itself keeps the Chrome one, because
 // a Firefox navigator.userAgent next to Chrome's features makes it reload
 // forever.
-const FIREFOX_UA = 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
+const FIREFOX_UA = `Mozilla/5.0 (${process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10.15' : 'X11; Linux x86_64'}; rv:140.0) Gecko/20100101 Firefox/140.0`;
 
 /** One window, and the popups it opens (like "Continuar com o Google"), in the same session. */
 function useLoginFriendlyAgent(contents) {
@@ -104,6 +106,7 @@ const PROVIDERS = {
   chatgpt: {
     name: 'ChatGPT',
     home: 'https://chatgpt.com/',
+    loginUrl: 'https://chatgpt.com/auth/login',
     convUrl: (id) => `https://chatgpt.com/c/${id}`,
     input: '#prompt-textarea',
     send: 'button[data-testid="send-button"]',
@@ -139,6 +142,7 @@ const PROVIDERS = {
   claude: {
     name: 'Claude',
     home: 'https://claude.ai/new',
+    loginUrl: 'https://claude.ai/login',
     convUrl: (id) => `https://claude.ai/chat/${id}`,
     input: 'div[contenteditable="true"]',
     send: 'button[aria-label="Send message"], button[aria-label="Enviar mensagem"]',
@@ -171,6 +175,7 @@ const PROVIDERS = {
   deepseek: {
     name: 'DeepSeek',
     home: 'https://chat.deepseek.com/',
+    loginUrl: 'https://chat.deepseek.com/sign_in',
     convUrl: (id) => `https://chat.deepseek.com/a/chat/s/${id}`,
     input: 'textarea',
     send: null, // Enter sends
@@ -197,6 +202,7 @@ const PROVIDERS = {
   gemini: {
     name: 'Gemini',
     home: 'https://gemini.google.com/app',
+    loginUrl: 'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fgemini.google.com%2Fapp&hl=pt-BR',
     convUrl: (id) => `https://gemini.google.com/app/${id}`,
     input: 'rich-textarea .ql-editor, div[contenteditable="true"]',
     send: 'button.send-button, button[aria-label*="Send"], button[aria-label*="Enviar"]',
@@ -352,8 +358,11 @@ class AiService extends EventEmitter {
     if (!PROVIDERS[provider]) return;
     const win = this._win(provider);
     clearTimeout(this.idleTimers?.get(provider));
-    // the page may have been blanked while idle: bring the site back first
-    if (!win.webContents.getURL().startsWith(new URL(PROVIDERS[provider].home).origin)) win.loadURL(PROVIDERS[provider].home).catch(() => {});
+    // logged out: straight to the sign-in page (some home pages go blank
+    // without a session); logged in: back to the site if it was blanked
+    const p = PROVIDERS[provider];
+    if (!this.state.get(provider)?.loggedIn && p.loginUrl) win.loadURL(p.loginUrl).catch(() => {});
+    else if (!win.webContents.getURL().startsWith(new URL(p.home).origin)) win.loadURL(p.home).catch(() => {});
     win.show();
     win.focus();
   }
@@ -367,6 +376,8 @@ class AiService extends EventEmitter {
       const p = PROVIDERS[id];
       if (!p) return;
       const win = this._win(id);
+      // I'm logging in in this window: don't pull it back to the home page
+      if (win.isVisible()) return;
       await this._loaded(win);
       if (!win.webContents.getURL().startsWith(new URL(p.home).origin)) await this._go(win, p.home);
       let loggedIn = false;

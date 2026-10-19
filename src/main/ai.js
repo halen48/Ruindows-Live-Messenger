@@ -165,7 +165,8 @@ const PROVIDERS = {
     home: 'https://chatgpt.com/',
     loginUrl: 'https://chatgpt.com/auth/login',
     convUrl: (id) => `https://chatgpt.com/c/${id}`,
-    input: '#prompt-textarea',
+    // the old textarea id, or the ProseMirror editor that replaced it
+    input: '#prompt-textarea, div.ProseMirror[contenteditable="true"]',
     send: 'button[data-testid="send-button"]',
     busy: 'button[data-testid="stop-button"]',
     idFromUrl: (url) => url.match(/\/c\/([\w-]+)/)?.[1] || null,
@@ -276,7 +277,8 @@ const PROVIDERS = {
     // no JSON API: read the sidebar
     list: `(async () => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      for (let i = 0; i < 20 && !document.querySelector('a[href^="/app/"]'); i++) await sleep(300);
+      // the sidebar fills in late (~10 s on a cold start)
+      for (let i = 0; i < 50 && !document.querySelector('a[href^="/app/"]'); i++) await sleep(300);
       const seen = new Set();
       return [...document.querySelectorAll('a[href^="/app/"]')].map((a) => {
         const id = a.getAttribute('href').split('/')[2];

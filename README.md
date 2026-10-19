@@ -144,10 +144,11 @@ Telegram azul...), que é como você diferencia o mesmo "João" em três redes.
 
 - ✅ **WhatsApp** (via Baileys)
 - ✅ **IAs** (ChatGPT, DeepSeek, Gemini, Claude) e **Claude Code**
-- 🚧 **Telegram** — próximo da fila. Entra pela conta pessoal (MTProto), então
-  precisa de um `api_id` e `api_hash` seus, pegos de graça em
-  [my.telegram.org](https://my.telegram.org). Cada chat do Telegram vira um
-  contato na lista, com o selo azul.
+- ✅ **Telegram** — conta pessoal (MTProto). Entra por **QR code** (escaneia no
+  Telegram do celular: Config. > Dispositivos > Conectar dispositivo) ou por
+  telefone/SMS. Precisa de um `api_id`/`api_hash` seus, de graça em
+  [my.telegram.org](https://my.telegram.org) (uma vez só — identificam o app,
+  não você). Os chats entram na lista com o boneco azul.
 - 💭 **Discord, Instagram, etc.** — se a preguiça falar mais alto.
 
 ### Mídia e espaço em disco

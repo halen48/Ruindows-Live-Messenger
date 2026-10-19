@@ -164,6 +164,55 @@ class TelegramService extends EventEmitter {
     return this.status();
   }
 
+  /**
+   * Log in by QR code: scan it in the phone's Telegram (Settings > Devices >
+   * Link Desktop Device). Still needs api_id/api_hash once (they identify the
+   * app, not the account). Emits 'qr' with a tg://login URL to turn into an
+   * image; re-emits when the token refreshes.
+   */
+  async startQrLogin({ apiId, apiHash }) {
+    if (apiId && apiHash) {
+      this.state.apiId = Number(apiId);
+      this.state.apiHash = String(apiHash).trim();
+      this._save();
+    }
+    if (!this.configured()) throw new Error('faltam o api_id e o api_hash (pegue em my.telegram.org)');
+    if (this.login) throw new Error('já tem um login em andamento');
+
+    this.client = this._newClient();
+    const password = defer();
+    this.login = { step: 'qr', password };
+    await this.client.connect();
+
+    this.login.done = this.client.signInUserWithQrCode(
+      { apiId: Number(this.state.apiId), apiHash: String(this.state.apiHash) },
+      {
+        qrCode: async (code) => {
+          const token = Buffer.from(code.token).toString('base64url');
+          this.emit('qr', `tg://login?token=${token}`);
+        },
+        password: async () => {
+          this.login.step = 'password';
+          this.emit('login', this.status());
+          return password.promise;
+        },
+        onError: (err) => {
+          // transient while waiting for the scan: keep going (return false)
+          if (process.env.MSN_DEBUG) console.log('[tg] qr error:', err?.message);
+          return false;
+        },
+      }
+    )
+      .then(async () => { this.login = null; await this._onLoggedIn(); })
+      .catch((e) => {
+        const msg = e?.message || String(e);
+        this.login = null;
+        this.emit('login', { ...this.status(), error: msg });
+      });
+
+    return this.status();
+  }
+
   submitCode(value) {
     if (!this.login?.code) throw new Error('nenhum login esperando o código');
     this.login.code.resolve(String(value).trim());

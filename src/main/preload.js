@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('msn', {
   // Telegram login + lifecycle
   tgStatus: () => ipcRenderer.invoke('tg:status'),
   tgStartLogin: (opts) => ipcRenderer.invoke('tg:startLogin', opts),
+  tgStartQrLogin: (opts) => ipcRenderer.invoke('tg:startQrLogin', opts),
   tgSubmitCode: (code) => ipcRenderer.invoke('tg:submitCode', code),
   tgSubmitPassword: (pw) => ipcRenderer.invoke('tg:submitPassword', pw),
   tgLogout: () => ipcRenderer.invoke('tg:logout'),
@@ -79,6 +80,7 @@ contextBridge.exposeInMainWorld('msn', {
   onStickers: on('wa:stickers'),
   onAiRoster: on('ai:roster'),
   onTgLogin: on('tg:login'),
+  onTgQr: on('tg:qr'),
   aiGroups: () => ipcRenderer.invoke('ai:groups'),
   aiGroupCreate: (opts) => ipcRenderer.invoke('ai:groupCreate', opts),
   aiGroupUpdate: (jid, patch) => ipcRenderer.invoke('ai:groupUpdate', { jid, patch }),

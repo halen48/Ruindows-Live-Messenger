@@ -723,8 +723,12 @@ tg = new TelegramService({ stateFile: path.join(USER_DATA, 'telegram', 'state.js
 tg.on('message', (msg) => deliverMessage(msg));
 tg.on('roster', () => broadcast('wa:roster', fullRoster()));
 tg.on('login', (st) => broadcast('tg:login', st));
+tg.on('qr', async (url) => {
+  try { broadcast('tg:qr', await QRCode.toDataURL(url, { margin: 1, width: 220 })); } catch {}
+});
 ipcMain.handle('tg:status', () => tg.status());
 ipcMain.handle('tg:startLogin', (_e, opts) => tg.startLogin(opts || {}));
+ipcMain.handle('tg:startQrLogin', (_e, opts) => tg.startQrLogin(opts || {}));
 ipcMain.handle('tg:submitCode', (_e, code) => tg.submitCode(code));
 ipcMain.handle('tg:submitPassword', (_e, pw) => tg.submitPassword(pw));
 ipcMain.handle('tg:logout', () => tg.logout());

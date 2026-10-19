@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 function on(channel) {
   return (cb) => {
@@ -91,3 +91,31 @@ contextBridge.exposeInMainWorld('msn', {
   onMessageUpdated: on('wa:messageUpdated'),
   onSync: on('wa:sync'),
 });
+
+
+// --- UI zoom: Ctrl+scroll and Ctrl + / - / 0 (not an MSN thing, but handy on
+// hi-dpi screens). Works in every window since both load this preload. The
+// factor is remembered per window kind in localStorage.
+(function setupZoom() {
+  const KEY = 'uiZoom';
+  const clamp = (z) => Math.min(3, Math.max(0.5, Math.round(z * 100) / 100));
+  const read = () => { try { return parseFloat(localStorage.getItem(KEY)) || 1; } catch { return 1; } };
+  const apply = (z) => {
+    z = clamp(z);
+    try { webFrame.setZoomFactor(z); } catch {}
+    try { localStorage.setItem(KEY, String(z)); } catch {}
+    return z;
+  };
+  window.addEventListener('DOMContentLoaded', () => apply(read()));
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === '=' || e.key === '+') { e.preventDefault(); apply(webFrame.getZoomFactor() + 0.1); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); apply(webFrame.getZoomFactor() - 0.1); }
+    else if (e.key === '0') { e.preventDefault(); apply(1); }
+  });
+  window.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    apply(webFrame.getZoomFactor() + (e.deltaY < 0 ? 0.1 : -0.1));
+  }, { passive: false });
+})();

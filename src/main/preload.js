@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('msn', {
   aiSetEnabled: (ids) => ipcRenderer.invoke('ai:setEnabled', ids),
   aiLogin: (id) => ipcRenderer.invoke('ai:login', id),
   aiRefresh: () => ipcRenderer.invoke('ai:refresh'),
+  aiImportFirefox: () => ipcRenderer.invoke('ai:importFirefox'),
   themeGet: () => ipcRenderer.sendSync('ui:themeGet'),
   themeChoice: () => ipcRenderer.invoke('ui:themeChoice'),
   setTheme: (choice) => ipcRenderer.send('ui:setTheme', choice),

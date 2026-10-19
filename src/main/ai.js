@@ -17,7 +17,8 @@ const { ClaudeCode } = require('./claude-code');
  * Everything here depends on the sites' current layout and private APIs, so
  * expect to adjust selectors when a site changes.
  */
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, session } = require('electron');
+const { importFirefoxLogin } = require('./firefox-login');
 const { EventEmitter } = require('events');
 
 // all AI sites share one browser session, so signing in to Google (or any
@@ -369,6 +370,18 @@ class AiService extends EventEmitter {
     else if (!win.webContents.getURL().startsWith(new URL(p.home).origin)) win.loadURL(p.home).catch(() => {});
     win.show();
     win.focus();
+  }
+
+  /**
+   * Bring in the logins I already have in Firefox (Google included, which
+   * can't be done inside the app), then check every site again.
+   */
+  async importFirefox() {
+    const result = await importFirefoxLogin(session.fromPartition(AI_PARTITION));
+    // pages already open still have the old, logged-out state
+    for (const win of this.wins.values()) if (!win.isDestroyed() && !win.isVisible()) win.loadURL('about:blank').catch(() => {});
+    await this.refresh();
+    return { ...result, loggedIn: this.getRoster().filter((p) => p.loggedIn).map((p) => p.name) };
   }
 
   /** Re-check login and reload the conversation list for one or all providers. */

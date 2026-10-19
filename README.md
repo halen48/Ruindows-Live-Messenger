@@ -97,6 +97,12 @@ qualquer grupo), reação, mensagem editada ou quando ela lê o que você mandou
 ### IAs na lista de contatos
 - **ChatGPT**, **DeepSeek**, **Gemini** e **Claude** têm cada um a sua seção
   na lista, igual Grupos e Offline. Dois cliques em "Entrar no ..." e pronto.
+- **Login**: clique em "Entrar no ..." > **Usar o login do Firefox**. O Google
+  não deixa logar dentro de app nenhum ("Esse navegador ou app pode não ser
+  seguro"), então o app pega a sessão que você já tem no Firefox (Google,
+  ChatGPT, Claude, DeepSeek) e copia pra sessão das IAs. Feche o Firefox antes,
+  pra ele gravar os logins recentes. Sem Firefox: "Entrar pelo site" e use
+  e-mail/senha (não funciona pro Gemini).
 - **Grupos de IAs**: várias IAs na mesma janela, estilo ChatALL. Cada uma
   conversa no seu próprio chat do site, e a cada mensagem recebe só o que
   ainda não viu (o que você e as outras disseram). Dá pra escolher se

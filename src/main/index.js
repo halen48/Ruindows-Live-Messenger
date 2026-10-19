@@ -572,6 +572,7 @@ ipcMain.handle('ai:setEnabled', (_e, ids) => {
 });
 ipcMain.handle('ai:login', (_e, id) => ai.login(id));
 ipcMain.handle('ai:refresh', () => ai.refresh());
+ipcMain.handle('ai:importFirefox', () => ai.importFirefox().then((r) => r, (e) => ({ error: e?.message || String(e) })));
 ipcMain.on('ui:setStatus', (_e, status) => setMyStatus(status));
 // sync, so a chat window popped open by a message knows before it plays a sound
 ipcMain.on('ui:statusSync', (e) => { e.returnValue = myStatus; });

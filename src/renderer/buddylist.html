@@ -570,6 +570,35 @@
     return div;
   }
 
+  // signing in: the login I already have in Firefox (the only way Google
+  // works), or the site itself (e-mail/password)
+  function aiLoginMenu(prov, e) {
+    e.stopPropagation();
+    Menus.popup([
+      { label: 'Usar o login do Firefox', action: importFirefoxLogin },
+      { label: `Entrar pelo site do ${prov.name}...`, action: () => window.msn.aiLogin(prov.id) },
+    ], e.clientX, e.clientY);
+  }
+
+  async function importFirefoxLogin() {
+    const r = await window.msn.aiImportFirefox();
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    const msg = r.error
+      ? `Não deu para usar o login do Firefox: ${escapeHtml(r.error)}.`
+      : r.loggedIn.length
+        ? `Pronto! Logado em: ${escapeHtml(r.loggedIn.join(', '))}.`
+        : 'Copiei o login do Firefox, mas nenhuma IA ficou logada. Entre nelas no Firefox e tente de novo.';
+    overlay.innerHTML = `
+      <div class="xp-dialog">
+        <div class="xp-dialog-title">Login do Firefox</div>
+        <div class="xp-dialog-body"><img src="assets/wlm85/information.png" width="16" height="16"><div>${msg}</div></div>
+        <div class="xp-dialog-buttons"><button class="wlm-button">OK</button></div>
+      </div>`;
+    overlay.querySelector('button').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
   // ---- AI group chats: several AIs in one window ----------------------------
   let aiGroups = [];
   window.msn.aiGroups?.().then((g) => { aiGroups = g || []; if (lastRoster) render(lastRoster); });
@@ -665,7 +694,9 @@
       if (!prov.checked) {
         listEl.appendChild(aiRow('Conectando...', { icon: 'assets/wlm85/status16-away.png', dim: true, onOpen: () => window.msn.aiLogin(prov.id) }));
       } else if (!prov.loggedIn) {
-        listEl.appendChild(aiRow(`Entrar no ${prov.name}...`, { icon: 'assets/wlm85/status16-invisible.png', title: 'Abre o site para você entrar com a sua conta', single: true, onOpen: () => window.msn.aiLogin(prov.id) }));
+        const row = aiRow(`Entrar no ${prov.name}...`, { icon: 'assets/wlm85/status16-invisible.png', title: 'Usar o login do Firefox ou entrar pelo site' });
+        row.addEventListener('click', (e) => aiLoginMenu(prov, e));
+        listEl.appendChild(row);
       } else {
         listEl.appendChild(aiRow('Nova conversa', {
           icon: 'assets/wlm85/status16-online.png',
@@ -773,6 +804,7 @@
     Menus.popup([
       { label: 'Nova conversa', action: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}`), disabled: !prov.loggedIn },
       { label: 'Atualizar conversas', action: () => window.msn.aiRefresh() },
+      { label: 'Usar o login do Firefox', action: importFirefoxLogin },
       { label: prov.loggedIn ? 'Entrar com outra conta...' : `Entrar no ${prov.name}...`, action: () => window.msn.aiLogin(prov.id) },
       { sep: true },
       { label: `Esconder ${prov.name} da lista`, action: () => setAiEnabled(aiRoster.map((p) => p.id).filter((id) => id !== prov.id)) },

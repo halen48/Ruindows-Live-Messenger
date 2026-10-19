@@ -396,14 +396,18 @@
   };
   function contactPic(chat, status) {
     const src = chat.source;
-    // OTHER social networks: the network-coloured buddy (blue Telegram, pink
-    // Instagram, purple Discord). The colour IS the network marker.
+    // OTHER social networks: the SAME MSN icon, hue-shifted to the network's
+    // colour (blue Telegram, pink Instagram, purple Discord). Same status rule
+    // as WhatsApp: online / away / busy / offline. Offline is grey for all.
     if (src && src !== 'whatsapp' && NET[src]) {
-      return `<span class="pic-wrap" title="${NET[src]}"><img src="assets/net/buddy-${src}.svg" alt="${NET[src]}"></span>`;
+      let img;
+      if (chat.isGroup) img = `assets/net/${src}-group.png`;
+      else if (status === 'offline') img = 'assets/wlm85/status16-invisible.png';
+      else img = `assets/net/${src}-${status === 'away' || status === 'busy' ? status : 'online'}.png`;
+      return `<span class="pic-wrap" title="${NET[src]}"><img src="${img}" alt="${NET[src]}"></span>`;
     }
-    // WhatsApp: the real MSN status icon, which already shows the status
-    // (green buddy with the away clock / busy badge); groups keep the MSN
-    // two-buddies group icon.
+    // WhatsApp: the real MSN status icon (green buddy with the away clock /
+    // busy badge); groups keep the MSN two-buddies group icon.
     const img = chat.isGroup ? 'assets/wlm85/messenger-icon.png' : icon(status);
     return `<span class="pic-wrap" title="WhatsApp"><img src="${img}"></span>`;
   }

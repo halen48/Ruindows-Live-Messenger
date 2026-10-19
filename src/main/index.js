@@ -605,7 +605,7 @@ ipcMain.on('ui:profileSet', (e, profile) => {
   }
 });
 ipcMain.handle('wa:getSync', () => wa.getSync?.() || null);
-ipcMain.handle('wa:groupMembers', (_e, jid) => (AiService.isAiJid(jid) ? ai.groupMembers(jid) : wa.getGroupMembers?.(jid) || []));
+ipcMain.handle('wa:groupMembers', (_e, jid) => (isTgJid(jid) ? tg.groupMembers(jid) : AiService.isAiJid(jid) ? ai.groupMembers(jid) : wa.getGroupMembers?.(jid) || []));
 
 // ---- AI chat sites ---------------------------------------------------------------
 // every AI has its own section in the list, like Grupos and Offline; one can
@@ -644,7 +644,7 @@ ipcMain.on('ui:statusSync', (e) => { e.returnValue = myStatus; });
 ipcMain.handle('wa:getMessages', async (_e, jid) => {
   if (isTgJid(jid)) {
     const chat = tg.getRoster().find((c) => c.jid === jid);
-    return { jid, name: chat?.name || 'Telegram', me: wa.me, messages: await tg.getMessages(jid), presence: 'available', source: 'telegram' };
+    return { jid, name: chat?.name || 'Telegram', me: wa.me, messages: await tg.getMessages(jid), isGroup: !!chat?.isGroup, presence: chat?.presence || 'available', lastIncoming: chat?.lastIncoming || null, source: 'telegram' };
   }
   if (AiService.isAiJid(jid)) {
     return { jid, name: ai.displayName(jid), me: wa.me, messages: await ai.getMessages(jid), presence: 'available', isAi: true };

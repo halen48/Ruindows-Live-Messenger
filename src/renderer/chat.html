@@ -404,7 +404,9 @@
 <script src="js/activity.js"></script>
 <script>
   const jid = new URLSearchParams(location.search).get('jid');
-  const isGroup = jid.endsWith('@g.us') || jid.startsWith('ai:group:');
+  // Telegram groups (tg:<id>) only reveal their group-ness in the payload, so
+  // isGroup can still flip to true once init() loads it
+  let isGroup = jid.endsWith('@g.us') || jid.startsWith('ai:group:');
   // conversation with an AI site (ChatGPT, Claude...): text only
   const isAi = jid.startsWith('ai:');
   if (isAi) document.documentElement.classList.add('ai-chat');
@@ -690,6 +692,8 @@
   async function init() {
     const data = await window.msn.getMessages(jid);
     waMe = data.me;
+    // a Telegram group only announces itself here
+    if (data.isGroup && !isGroup) { isGroup = true; enableGroupUi(); }
     contactName = jid === data.me?.jid ? `${myDisplayName()} (você)` : data.name;
     lastIncoming = data.lastIncoming;
     busyInfo = { about: data.about, lastOutgoing: data.lastOutgoing, directIncoming: data.directIncoming };
@@ -766,7 +770,10 @@
       list.appendChild(row);
     }
   }
-  if (isGroup) {
+  let groupUiReady = false;
+  function enableGroupUi() {
+    if (groupUiReady) return;
+    groupUiReady = true;
     document.querySelector('.wlm-window').classList.add('group');
     const members = document.getElementById('members');
     members.hidden = false;
@@ -777,6 +784,9 @@
     document.getElementById('theirFrame').src = 'assets/wlm85/frame-neutral.png';
     members.before(groupDp);
   }
+  // WhatsApp/AI groups are known from the jid right away; Telegram groups only
+  // after init() reads the payload
+  if (isGroup) enableGroupUi();
   // statuses decay with time
   setInterval(() => (isGroup ? renderMembers() : updatePresence()), 60 * 1000);
 

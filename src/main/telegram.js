@@ -267,14 +267,18 @@ class TelegramService extends EventEmitter {
         if (!ent) continue;
         const id = String(d.id?.value ?? d.id);
         this.entities.set(id, ent);
+        const isGroup = !!(d.isGroup || d.isChannel);
+        const pres = isGroup ? { presence: 'available' } : this._presenceOf(ent);
         chats.push({
           jid: JID_PREFIX + id,
           source: 'telegram',
           name: d.title || this._entityName(ent) || 'Telegram',
-          isGroup: !!(d.isGroup || d.isChannel),
+          isGroup,
           unread: d.unreadCount || 0,
-          // Telegram doesn't hand out online/offline like MSN; show as online
-          presence: 'available',
+          // same online/away/offline rule as WhatsApp, from Telegram's own
+          // "last seen": presence + a lastIncoming the renderer ages
+          presence: pres.presence,
+          lastIncoming: pres.lastIncoming,
           about: '',
           pinned: !!d.pinned,
         });
@@ -284,6 +288,20 @@ class TelegramService extends EventEmitter {
     } catch (e) {
       if (process.env.MSN_DEBUG) console.log('[tg] refresh failed:', e?.message);
     }
+  }
+
+  // map Telegram's user "last seen" to the same presence the WhatsApp side
+  // uses (available = online; otherwise a lastIncoming the UI turns into
+  // online/away/offline by how long ago it was)
+  _presenceOf(ent) {
+    const now = Math.floor(Date.now() / 1000);
+    const st = ent?.status;
+    const c = st?.className;
+    if (c === 'UserStatusOnline') return { presence: 'available', lastIncoming: now };
+    if (c === 'UserStatusOffline') return { presence: 'unavailable', lastIncoming: Number(st.wasOnline) || 0 };
+    if (c === 'UserStatusRecently') return { presence: 'unavailable', lastIncoming: now - 3600 }; // ~away
+    // last week / month / long time / hidden
+    return { presence: 'unavailable', lastIncoming: 0 };
   }
 
   _entityName(ent) {
@@ -340,6 +358,26 @@ class TelegramService extends EventEmitter {
     const ent = await this._entity(jid);
     const sent = await this.client.sendMessage(ent, { message: text });
     return this._toUi(jid, sent);
+  }
+
+  /** Participants of a Telegram group/channel, in the member-panel shape. */
+  async groupMembers(jid) {
+    if (!this.client) return [];
+    try {
+      const ent = await this._entity(jid);
+      const users = await this.client.getParticipants(ent, { limit: 200 });
+      const meId = this.me && String(this.me.id?.value ?? this.me.id);
+      return users
+        .filter((u) => String(u.id?.value ?? u.id) !== meId)
+        .map((u) => {
+          const name = this._entityName(u) || 'Participante';
+          const pres = this._presenceOf(u);
+          return { jid: `${JID_PREFIX}${String(u.id?.value ?? u.id)}`, nick: name, title: name, name, lastIncoming: pres.lastIncoming, presence: pres.presence };
+        });
+    } catch (e) {
+      if (process.env.MSN_DEBUG) console.log('[tg] members failed:', e?.message);
+      return [];
+    }
   }
 
   async markRead(jid) {

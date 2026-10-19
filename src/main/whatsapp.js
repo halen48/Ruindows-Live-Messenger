@@ -242,8 +242,12 @@ class WhatsAppService extends EventEmitter {
     });
 
     sock.ev.on('messages.upsert', ({ messages, type }) => {
+      this._diag({ ev: 'upsert', type, n: messages.length });
       if (type !== 'notify' && type !== 'append') return;
-      for (const m of messages) this._storeMessage(m, { silent: type === 'append' });
+      for (const m of messages) {
+        try { this._storeMessage(m, { silent: type === 'append' }); }
+        catch (e) { this._diag({ ev: 'store-error', err: e?.message }); }
+      }
       this._scheduleSave();
     });
 
@@ -590,7 +594,8 @@ class WhatsAppService extends EventEmitter {
     try { if (fs.statSync(file).size > 2e6) fs.rmSync(file); } catch {}
     const stream = {
       write: (line) => {
-        if (!/app.?state|syncd|resync|sync state|snapshot|patch|regular|critical|mutation|key.*(missing|not found|find)/i.test(line)) return;
+        // also: connection/buffer state and any error (keys only, never message text)
+        if (!/app.?state|syncd|resync|sync state|snapshot|patch|regular|critical|mutation|key.*(missing|not found|find)|AwaitingInitialSync|Online|buffer|decrypt|"level":(50|60)/i.test(line)) return;
         try { fs.appendFileSync(file, line); } catch {}
       },
     };
@@ -1136,7 +1141,7 @@ class WhatsAppService extends EventEmitter {
     const remotePn = this._bareJid(msg.key.remoteJidAlt || msg.key.senderPn);
     if (remote?.endsWith('@lid') && remotePn?.endsWith('@s.whatsapp.net')) this.lidToPn.set(remote, remotePn);
     const jid = this._canonChat(remote);
-    if (!jid || jid === 'status@broadcast') return;
+    if (!jid || jid === 'status@broadcast') { if (!jid) this._diag({ ev: 'no-chat', remote: String(remote).replace(/^[^@]*/, '*') }); return; }
     const lid = this._bareJid(msg.key.participant);
     const pnAlias = this._bareJid(msg.key.participantPn);
     if (lid?.endsWith('@lid') && pnAlias?.endsWith('@s.whatsapp.net')) this.lidToPn.set(lid, pnAlias);
@@ -1169,7 +1174,11 @@ class WhatsAppService extends EventEmitter {
       ui.text = '⏳ Esperando esta mensagem. O WhatsApp vai reenviar (abrir o WhatsApp no celular ajuda).';
       ui.pending = true;
     }
-    if (ui.text == null) return;
+    if (ui.text == null) {
+      this._diag({ ev: 'dropped', fromMe: !!msg.key.fromMe, stub: msg.messageStubType || 0, kinds: Object.keys(inner).join(',') });
+      return;
+    }
+    if (!ui.fromMe) this._diag({ ev: 'stored', silent: !!silent, group: jid.endsWith('@g.us') });
     // a message sent while I was offline: it pops its window like a new one
     const offline = !ui.fromMe && silent && this.prevOnline && ui.timestamp / 1000 > this.prevOnline;
 
@@ -1225,6 +1234,15 @@ class WhatsAppService extends EventEmitter {
     if (!silent) this.emit('message', ui);
     else if (offline) this.emit('offline-message', ui);
     this._emitRoster();
+  }
+
+  /** What happens to incoming messages, without any content, in wa-data/incoming.log. */
+  _diag(o) {
+    try {
+      const file = path.join(this.dataDir, 'incoming.log');
+      if (!this._diagChecked) { this._diagChecked = true; try { if (fs.statSync(file).size > 1e6) fs.rmSync(file); } catch {} }
+      fs.appendFileSync(file, JSON.stringify({ at: new Date().toTimeString().slice(0, 8), ...o }) + '\n');
+    } catch {}
   }
 
   /** Why a message couldn't be decrypted (no content), in wa-data/decrypt.log. */

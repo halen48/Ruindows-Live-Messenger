@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Conversa</title>
+<link rel="stylesheet" href="css/msn.css">
+<link rel="stylesheet" href="css/wlm85.css">
+<script src="js/theme.js"></script>
+<style>
+  .wlm-window.chat {
+    background:
+      url('assets/wlm85/chat-chat_header.png') top / 100% 70px no-repeat,
+      linear-gradient(180deg, #e3f1f7 70px, #eef7fb 160px, #f7fbfd 100%);
+  }
+  .chat .wlm-titlebar .title-icon { width: 16px; height: 16px; }
+  .chat .wlm-titlebar .addr { color: #5a6d80; }
+
+  /* --- big icon toolbar --------------------------------------------------- */
+  .toolbar {
+    flex: none;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 6px 2px 8px;
+  }
+  .tb {
+    height: 32px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0 3px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+  }
+  .tb:hover { background: linear-gradient(180deg, #fafdfe, #e2f2fb); border-color: #9fcbe6; }
+  .tb img { width: 24px; height: 24px; }
+  .tb.small img { width: 16px; height: 16px; }
+  .tb img.caret, .fb img.caret { width: 9px; height: 6px; }
+  .toolbar .spacer { flex: 1; }
+
+  /* --- conversation + display pictures ------------------------------------ */
+  .conv { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 0 8px 8px; }
+  .left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  .history-box {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #a7bfd3;
+    border-radius: 3px;
+  }
+  .history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 8px 4px;
+    user-select: text;
+    cursor: auto;
+  }
+  .notice {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    color: #5a5a5a;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #e1e6ea;
+  }
+  .notice img { flex: none; width: 16px; height: 16px; }
+  .away-notice[hidden] { display: none; }
+  .msg-block { margin: 3px 0 5px; position: relative; }
+  /* a run of messages from the same person: only the first shows "X diz:" */
+  .msg-block.cont { margin-top: -4px; }
+  .msg-block.cont .msg-who { display: none; }
+  .msg-block .cont-reply { display: none; position: absolute; right: 2px; top: 0; color: var(--wlm-link); cursor: pointer; background: #fff; padding-left: 4px; }
+  .msg-block.cont:hover .cont-reply { display: block; }
+  .msg-block .cont-reply:hover { text-decoration: underline; }
+  .msg-who { color: #6d6d6d; }
+  .msg-who .sender { cursor: pointer; }
+  .msg-who .time { color: #9a9a9a; margin-left: 4px; }
+  .msg-who .sender:hover { color: var(--wlm-link); text-decoration: underline; }
+  .msg-text { padding: 1px 0 1px 12px; color: #1e1e1e; white-space: pre-wrap; word-wrap: break-word; }
+  .msg-text .emo { vertical-align: -4px; }
+  .msg-text img.sent-ink { max-width: 240px; border: 1px solid #d0d0d0; }
+  /* quoted message, WhatsApp-style reply */
+  /* my messages and my typing box in my chosen font */
+  .msg-block.mine .msg-text, #input {
+    font-family: var(--my-font, var(--wlm-font)); font-size: var(--my-size, 13px);
+    font-weight: var(--my-weight, normal); font-style: var(--my-style, normal); color: var(--my-color, #1e1e1e);
+  }
+  .font-dialog { width: 430px; }
+  .font-grid { display: grid; grid-template-columns: 1fr 120px 70px; gap: 8px; padding: 10px 12px 4px; }
+  .font-grid label, .font-lower label { display: flex; flex-direction: column; gap: 2px; }
+  .font-grid input { font: inherit; padding: 1px 3px; border: 1px solid #a5acb5; }
+  .font-grid select { font: inherit; border: 1px solid #a5acb5; height: 124px; }
+  .font-lower { display: grid; grid-template-columns: 140px 1fr; gap: 10px; padding: 4px 12px; align-items: start; }
+  .font-lower select { font: inherit; }
+  .font-lower fieldset { margin: 0; border: 1px solid #c5ccd5; height: 60px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .font-sample { white-space: nowrap; }
+  .font-note { padding: 2px 12px 6px; color: #6d6d6d; font-size: 11px; }
+  .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin: 1px 0 2px 12px; }
+  .reaction { display: inline-flex; align-items: center; gap: 2px; padding: 0 5px; border: 1px solid #c5d3e3; border-radius: 9px; background: #f4f8fc; font-size: 11px; line-height: 17px; }
+  .reaction b { font-weight: normal; color: #5b5b5b; }
+  .reaction img.emo { width: 16px; height: 16px; }
+  .dl-link { color: var(--wlm-link); cursor: pointer; text-decoration: underline; }
+  .edited { color: #9a9a9a; font-size: 11px; }
+  .quote { margin: 2px 0 3px 12px; padding: 2px 6px; border-left: 3px solid #9bb5d6; background: #f1f5fa; color: #5b5b5b; cursor: pointer; max-width: 420px; }
+  .quote b { font-weight: normal; color: #2a5d93; }
+  .quote .qt { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .quote.has-pic { display: flex; gap: 6px; align-items: center; }
+  .quote .qbody { min-width: 0; }
+  .quote .qthumb { width: 40px; height: 40px; object-fit: cover; flex: none; border: 1px solid #c9d3e0; }
+  .quote .qthumb.qsticker { object-fit: contain; border: 0; background: none; }
+  .quote .qthumb:not([src]) { visibility: hidden; }
+  .msg-block.flash { animation: flash 1.2s; }
+  @keyframes flash { 0%, 60% { background: #fff3b0; } 100% { background: transparent; } }
+  .ai-chat .msg-block .reply-link, .ai-chat .msg-block .cont-reply { display: none !important; }
+  .msg-block .reply-link { visibility: hidden; margin-left: 6px; color: var(--wlm-link); cursor: pointer; }
+  .msg-block:hover .reply-link { visibility: visible; }
+  .msg-block .reply-link:hover { text-decoration: underline; }
+  #replyBar { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border: 1px solid #c5d3e3; border-bottom: 0; background: #eef3f9; color: #5b5b5b; }
+  #replyBar[hidden] { display: none; }
+  #replyBar .rb-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #replyBar .rb-close { cursor: pointer; padding: 0 4px; color: #6d6d6d; }
+  #replyBar .rb-close:hover { color: #c00; }
+  /* video: thumbnail with a play button until clicked */
+  .video-thumb { position: relative; display: inline-block; margin: 3px 0; cursor: pointer; border: 1px solid #d0d0d0; }
+  .video-thumb img { display: block; width: 240px; min-height: 60px; background: #222; }
+  .video-thumb .play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .video-thumb .play span { width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 18px; display: flex; align-items: center; justify-content: center; padding-left: 3px; }
+  .video-thumb .dur { position: absolute; right: 4px; bottom: 3px; color: #fff; font-size: 11px; text-shadow: 0 0 2px #000; }
+  .msg-text video { display: block; max-width: 320px; max-height: 260px; margin: 3px 0; background: #000; }
+  .msg-text img.photo { display: block; max-width: 260px; max-height: 260px; margin: 3px 0; border: 1px solid #d0d0d0; cursor: pointer; }
+  .msg-text img.sticker { display: block; width: 120px; height: 120px; object-fit: contain; margin: 3px 0; }
+  .nudge-block {
+    margin: 8px 0;
+    padding: 5px 0;
+    border-top: 1px solid #d6dde3;
+    border-bottom: 1px solid #d6dde3;
+    color: #5a5a5a;
+  }
+  .last-msg {
+    flex: none;
+    padding: 3px 8px 4px;
+    color: #6d6d6d;
+    font-size: 11px;
+    min-height: 20px;
+  }
+
+  .splitter { flex: none; height: 9px; display: flex; align-items: center; justify-content: center; }
+
+  .fmt-bar { flex: none; display: flex; align-items: center; gap: 1px; padding: 0 0 3px; }
+  .fb {
+    height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 3px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+  }
+  .fb:hover { background: linear-gradient(180deg, #fafdfe, #e2f2fb); border-color: #9fcbe6; }
+  .fb img { height: 16px; }
+  .fmt-bar .spacer { flex: 1; }
+
+  .input-box {
+    flex: none;
+    height: 70px;
+    display: flex;
+    background: #fff;
+    border: 1px solid #a7bfd3;
+    border-radius: 3px;
+  }
+  .input-box textarea {
+    flex: 1;
+    border: none;
+    resize: none;
+    padding: 4px 6px;
+    font-size: 12px;
+    background: transparent;
+  }
+  #inkCanvas { flex: 1; height: 68px; cursor: crosshair; background: #fff; display: none; }
+  .input-box.ink textarea { display: none; }
+  .input-box.ink #inkCanvas { display: block; }
+
+  .send-row { flex: none; display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; }
+  .input-tabs { display: flex; gap: 2px; }
+  .input-tab {
+    width: 26px;
+    height: 21px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #a7bfd3;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #fbfdfe, #dcecf5);
+    font-family: 'Times New Roman', serif;
+    font-weight: bold;
+    font-size: 14px;
+    color: #2a5d93;
+  }
+  .input-tab.active { background: #fff; border-color: #3c7fb1; }
+  .send-row .spacer { flex: 1; }
+  .search-btn {
+    width: 26px;
+    height: 23px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #adb2b5;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #f2f2f2, #dcdcdc);
+  }
+
+  .dps {
+    flex: none;
+    width: 124px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .dps .wlm-dp { margin-top: 2px; }
+
+  /* group conversations: participant list where the contact's picture goes */
+  .group .dps { width: 220px; align-items: stretch; }
+  .group .dps .wlm-dp { align-self: center; }
+  .group .group-dp { display: flex; justify-content: center; margin-bottom: 4px; }
+  .members {
+    flex: 1;
+    min-height: 0;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #a7bfd3;
+    border-radius: 3px;
+  }
+  .members-title { flex: none; padding: 5px 7px 3px; font-weight: 600; border-bottom: 1px solid #e1e6ea; }
+  .members-title .count { font-weight: 400; color: #5a5a5a; }
+  .members-list { flex: 1; overflow-y: auto; padding: 3px 0; }
+  .member {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 3px;
+    padding: 1px 4px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .member:hover { background: linear-gradient(180deg, #fafdfe, #e8f5fd); border-color: #b8e2fb; }
+  .member img { flex: none; width: 16px; height: 16px; }
+  .member span { overflow: hidden; text-overflow: ellipsis; }
+  .member .st { color: #6d6d6d; }
+  .member.typing span::after { content: ' ✎'; color: var(--wlm-link); }
+  .dp-arrow { align-self: flex-end; margin: -2px 6px 0 0; }
+
+  /* --- popups ------------------------------------------------------------------- */
+  .palette {
+    position: absolute;
+    z-index: 20;
+    display: none;
+    background: #fff;
+    border: 1px solid #979797;
+    box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.3);
+    padding: 3px;
+  }
+  .pal-tabs { display: flex; gap: 2px; margin-bottom: 3px; border-bottom: 1px solid #c5d3e3; }
+  .pal-tabs span { padding: 2px 8px; cursor: pointer; color: #4d4d4d; border: 1px solid transparent; border-bottom: 0; border-radius: 3px 3px 0 0; }
+  .pal-tabs span.on { background: #e8f5fd; border-color: #84acdd; color: #000; }
+  .pal-grid.emo { display: grid; grid-template-columns: repeat(10, 25px); }
+  .pal-grid.stk { display: grid; grid-template-columns: repeat(5, 54px); gap: 2px; width: 280px; max-height: 240px; overflow-y: auto; }
+  .pal-grid[hidden] { display: none; }
+  .pal-grid.stk span { width: 54px; height: 54px; }
+  .pal-grid.stk img { width: 48px; height: 48px; object-fit: contain; }
+  .pal-section { grid-column: 1 / -1; color: #6d6d6d; font-size: 11px; padding: 2px 2px 0; }
+  .pal-empty { grid-column: 1 / -1; color: #6d6d6d; padding: 8px; width: 250px; }
+  .palette .pal-grid > span { display: flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 2px; cursor: pointer; }
+  .palette .pal-grid > span:hover { background: #e8f5fd; border-color: #84acdd; }
+  .palette .pal-grid.emo span { width: 25px; height: 25px; }
+  .palette .pal-grid.emo img { width: 19px; height: 19px; }
+
+  .fmt-pop {
+    position: absolute;
+    z-index: 20;
+    display: none;
+    background: #fff;
+    border: 1px solid #979797;
+    box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.3);
+    padding: 6px 8px;
+    width: 152px;
+  }
+  .fmt-pop .fmt-toggle {
+    display: inline-block; width: 24px; height: 22px;
+    border: 1px solid #a7bfd3; border-radius: 2px;
+    text-align: center; line-height: 20px; margin-right: 4px;
+  }
+  .fmt-pop .fmt-toggle.on { background: #d5effc; border-color: #3c7fb1; }
+  .fmt-pop .swatches { margin-top: 6px; display: grid; grid-template-columns: repeat(8, 15px); gap: 2px; }
+  .fmt-pop .swatch { width: 13px; height: 13px; border: 1px solid #808080; }
+  .fmt-pop .swatch:hover { outline: 1.5px solid #3c7fb1; }
+</style>
+</head>
+<body>
+<div class="wlm-window chat">
+  <div class="wlm-titlebar">
+    <img class="title-icon" id="titleIcon" src="assets/wlm85/status16-online.png" alt="">
+    <div class="title-text"><span id="winTitle">&hellip;</span> <span class="addr" id="toAddr"></span></div>
+  </div>
+  <div class="wlm-caption">
+    <button class="minimize" title="Minimizar"><svg class="glyph" width="10" height="5"><rect x="0.5" y="1.5" width="9" height="3" fill="#fff" stroke="#384c66"/></svg></button>
+    <button class="maximize" title="Maximizar"><svg class="glyph" width="11" height="9"><rect x="0.5" y="0.5" width="10" height="8" fill="none" stroke="#384c66"/><rect x="1.5" y="1.5" width="8" height="6" fill="none" stroke="#fff"/><rect x="2.5" y="3.5" width="6" height="3" fill="#cfdbe8" stroke="#384c66"/></svg></button>
+    <button class="close" title="Fechar"><svg class="glyph" width="12" height="10"><path d="M2 1.5l8 7M10 1.5l-8 7" stroke="#5a1a0c" stroke-width="3.2" stroke-linecap="round"/><path d="M2 1.5l8 7M10 1.5l-8 7" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+
+  <div class="toolbar">
+    <div class="tb unavailable" title="Convidar alguém para esta conversa"><img src="assets/wlm85/chat-invite.png" alt=""></div>
+    <div class="tb" id="sendFilesBtn" title="Compartilhar arquivos"><img src="assets/wlm85/chat-folder.png" alt=""></div>
+    <div class="tb unavailable" title="Iniciar ou parar uma chamada de voz"><img src="assets/wlm85/chat-phone.png" alt=""></div>
+    <div class="tb unavailable" title="Atividades"><img src="assets/wlm85/chat-music.png" alt=""></div>
+    <div class="tb unavailable" title="Jogos"><img src="assets/wlm85/chat-games.png" alt=""></div>
+    <div class="tb unavailable" title="Bloquear"><img src="assets/wlm85/chat-block.png" alt=""></div>
+    <div class="spacer"></div>
+    <div class="tb small unavailable" title="Mudar o esquema de cores"><img src="assets/wlm85/chat-colors.png" alt=""></div>
+    <div class="tb small" id="menuBtn" title="Mostrar menu"><svg width="14" height="12"><rect x="0.5" y="0.5" width="13" height="11" fill="#fff" stroke="#6d8099"/><path d="M3 3.5h8M3 6h8M3 8.5h8" stroke="#2d6d8f"/></svg><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+  </div>
+
+  <div class="conv">
+    <div class="left">
+      <div class="history-box">
+        <div class="history" id="history">
+          <div class="notice">
+            <img src="assets/wlm85/information.png" alt="">
+            <span>Nunca forneça sua senha ou o número do seu cartão de crédito em uma conversa por mensagens instantâneas.</span>
+          </div>
+          <div class="notice away-notice" id="awayNotice" hidden>
+            <img src="assets/wlm85/information.png" alt="">
+            <span id="awayText"></span>
+          </div>
+        </div>
+        <div class="last-msg" id="statusText"></div>
+      </div>
+
+      <div class="splitter"><img src="assets/wlm85/chat-points.png" width="36" height="4" alt=""></div>
+
+      <div class="fmt-bar">
+        <div class="fb" id="emoBtn" title="Selecionar um emoticon"><img src="assets/wlm85/chat-emoticon.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+        <div class="fb unavailable" title="Enviar um wink"><img src="assets/wlm85/chat-winks.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+        <div class="fb" id="nudgeBtn" title="Chamar a atenção"><img src="assets/wlm85/chat-tilt.png" alt="" style="width:24px"></div>
+        <div class="fb unavailable" title="Clipe de voz"><img src="assets/wlm85/chat-voice.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+        <div class="spacer"></div>
+        <div class="fb" id="fontBtn" title="Alterar a fonte"><span style="font-family:'Times New Roman',serif;font-weight:bold;font-size:15px;color:#2a5d93">A</span><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+        <div class="fb unavailable" title="Alterar o plano de fundo"><img src="assets/wlm85/chat-bg.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+      </div>
+
+      <div id="replyBar" hidden><span class="rb-text" id="replyText"></span><span class="rb-close" id="replyClose" title="Cancelar resposta">✕</span></div>
+      <div class="input-box" id="inputRow">
+        <textarea id="input" spellcheck="false"></textarea>
+        <canvas id="inkCanvas" height="68"></canvas>
+      </div>
+
+      <div class="send-row">
+        <div class="input-tabs">
+          <div class="input-tab active" id="textTab" title="Digitar">A</div>
+          <div class="input-tab" id="inkTab" title="Escrever à mão"><img src="assets/wlm85/nodraw.png" width="14" height="13" alt=""></div>
+        </div>
+        <div class="spacer"></div>
+        <button class="wlm-button" id="sendBtn" disabled>Enviar</button>
+        <div class="search-btn" id="searchBtn" title="Pesquisar"><svg width="12" height="12"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#5a5a5a" stroke-width="1.4"/><path d="M8 8l3 3" stroke="#5a5a5a" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+      </div>
+    </div>
+
+    <div class="dps">
+      <div class="members" id="members" hidden>
+        <div class="members-title">Participantes <span class="count" id="memberCount"></span></div>
+        <div class="members-list" id="memberList"></div>
+      </div>
+      <div id="theirDpBox">
+        <div class="wlm-dp">
+          <img class="pic" id="theirDp" src="assets/wlm85/avatar-default.png" alt="">
+          <img class="frame" id="theirFrame" src="assets/wlm85/frame-online.png" alt="">
+        </div>
+      </div>
+      <div class="wlm-dp">
+        <img class="pic" id="myDp" src="assets/wlm85/avatar-default.png" alt="">
+        <img class="frame" id="myFrame" src="assets/wlm85/frame-online.png" alt="">
+      </div>
+    </div>
+  </div>
+
+  <div class="palette" id="palette"></div>
+</div>
+
+<script src="js/chrome.js"></script>
+<script src="js/menus.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/emoticons.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/activity.js"></script>
+<script>
+  const jid = new URLSearchParams(location.search).get('jid');
+  const isGroup = jid.endsWith('@g.us') || jid.startsWith('ai:group:');
+  // conversation with an AI site (ChatGPT, Claude...): text only
+  const isAi = jid.startsWith('ai:');
+  if (isAi) document.documentElement.classList.add('ai-chat');
+  const historyEl = document.getElementById('history');
+  const inputEl = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+  const statusBar = document.getElementById('statusText');
+  const awayNotice = document.getElementById('awayNotice');
+
+  let contactName = '';
+  let lastIncoming = null;
+  let busyInfo = {};
+  let lastPresence = 'unavailable';
+  let waMe = null;
+  let waMyDp = null;
+  const rendered = new Set();
+  let lastReceivedText = '';
+
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  /** "14:32" today, "18/10 14:32" for older messages. */
+  function msgTime(ts) {
+    const d = new Date(ts);
+    const today = new Date().toDateString() === d.toDateString();
+    return today ? fmtTime(ts) : `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${fmtTime(ts)}`;
+  }
+  function fmtDate(ts) {
+    return new Date(ts).toLocaleDateString('pt-BR');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  function appendMessage(m) {
+    if (!m || rendered.has(m.id)) return;
+    rendered.add(m.id);
+    const el = document.createElement('div');
+    if (m.isNudge) {
+      el.className = 'nudge-block';
+      el.textContent = m.fromMe
+        ? 'Você chamou a atenção.'
+        : `${m.senderName} chamou a sua atenção!`;
+    } else {
+      el.className = 'msg-block';
+      el.dataset.id = m.id;
+      // same sender as the block right above, nothing in between: continue it
+      const prev = historyEl.lastElementChild;
+      if (prev?.classList.contains('msg-block') && prev._m && senderKey(prev._m) === senderKey(m)) el.classList.add('cont');
+      fillBlock(el, m);
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        Menus.popup([{ label: 'Responder', action: () => startReply(el._m) }], e.clientX, e.clientY);
+      });
+    }
+    historyEl.appendChild(el);
+    historyEl.scrollTop = historyEl.scrollHeight;
+    if (m.fromMe && !isGroup) busyInfo.lastOutgoing = Math.max(busyInfo.lastOutgoing || 0, m.timestamp / 1000);
+    if (!m.fromMe) {
+      lastReceivedText = `A última mensagem foi recebida às ${fmtTime(m.timestamp)} em ${fmtDate(m.timestamp)}.`;
+      statusBar.textContent = lastReceivedText;
+    }
+  }
+
+  function senderKey(m) {
+    return m.fromMe ? 'me' : m.senderPn || m.senderJid || m.senderName || jid;
+  }
+
+  /** (Re)draw one message: header, quote, text/media and reactions. */
+  function fillBlock(el, m) {
+    el._m = m;
+    el.classList.toggle('mine', !!m.fromMe);
+    const who = m.fromMe ? myDisplayName() : m.senderName;
+    const whoHtml = isGroup && !m.fromMe ? groupSenderHtml(m) : escapeHtml(who);
+    // a bare photo/sticker shows just the picture; a caption stays as text
+    const text = m.media && !m.caption ? '' : messageHtml(m.text);
+    el.innerHTML =
+      `<div class="msg-who"${m.fromMe ? ' data-me' : ''}><span class="who">${whoHtml}</span> diz: <span class="time">(${msgTime(m.timestamp)})</span>` +
+      `<span class="reply-link">Responder</span></div>` +
+      quoteHtml(m.quote) +
+      `<div class="msg-text">${text}${m.edited ? ' <span class="edited">(editada)</span>' : ''}</div>` +
+      reactionsHtml(m.reactions) +
+      '<span class="cont-reply">Responder</span>';
+    el.querySelector('.reply-link').addEventListener('click', () => startReply(m));
+    el.querySelector('.cont-reply').addEventListener('click', () => startReply(m));
+    el.querySelector('.msg-text').title = msgTime(m.timestamp);
+    el.querySelector('.quote')?.addEventListener('click', () => jumpTo(m.quote.id));
+    if (m.quote?.media) fillQuotePic(el, m.quote);
+    if (m.media) loadMedia(m, el.querySelector('.msg-text'));
+    const sender = el.querySelector('.sender[data-jid]');
+    sender?.addEventListener('click', () => window.msn.openChat(sender.dataset.jid));
+  }
+
+  /** Reactions as small chips under the message: "👍 2", names on hover. */
+  function reactionsHtml(reactions) {
+    const list = Object.values(reactions || {});
+    if (!list.length) return '';
+    const byEmoji = new Map();
+    for (const r of list) {
+      const name = r.fromMe ? myDisplayName() : r.name || (isGroup ? 'Alguém' : contactName);
+      byEmoji.set(r.emoji, [...(byEmoji.get(r.emoji) || []), name]);
+    }
+    const chips = [...byEmoji].map(([emoji, names]) =>
+      `<span class="reaction" title="${escapeHtml(names.join(', '))}">${messageHtml(emoji)}${names.length > 1 ? ` <b>${names.length}</b>` : ''}</span>`);
+    return `<div class="reactions">${chips.join('')}</div>`;
+  }
+
+  function blockFor(id) {
+    return id && historyEl.querySelector(`.msg-block[data-id="${CSS.escape(id)}"]`);
+  }
+
+  window.msn.onReaction?.(({ chatJid, id, reactions }) => {
+    if (chatJid !== jid) return;
+    const el = blockFor(id);
+    if (!el) return;
+    el._m = { ...el._m, reactions };
+    el.querySelector('.reactions')?.remove();
+    el.insertAdjacentHTML('beforeend', reactionsHtml(reactions));
+  });
+  window.msn.onMessageUpdated?.((m) => {
+    if (m.chatJid !== jid) return;
+    const el = blockFor(m.id);
+    if (el) fillBlock(el, m);
+  });
+
+  /** "+55 (11) 90000-0001" for Brazilian numbers, "+<digits>" otherwise. */
+  function fmtPhone(pnJid) {
+    const d = pnJid.replace(/@.*/, '');
+    const br = d.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+    return br ? `+55 (${br[1]}) ${br[2]}-${br[3]}` : `+${d}`;
+  }
+
+  /** Group sender as "nick (number)", clickable to open a private chat. */
+  function groupSenderHtml(m) {
+    const rawNick = m.senderNick ?? m.pushName;
+    const nick = rawNick ? escapeHtml(rawNick) : '';
+    const title = m.senderTitle ? escapeHtml(m.senderTitle) : '';
+    if (!m.senderPn) return title ? `${title}${nick ? ` (${nick})` : ''}` : nick || 'Participante';
+    // with a group title: "Title (Nick - number)"; otherwise "Nick (number)"
+    const inner = nick ? `${nick}${title ? ' - ' : ' '}` : '';
+    const label = title
+      ? `${title} (${inner}${fmtPhone(m.senderPn)})`
+      : nick ? `${nick} (${fmtPhone(m.senderPn)})` : `(${fmtPhone(m.senderPn)})`;
+    return `<span class="sender" data-jid="${escapeHtml(m.senderPn)}" title="Abrir conversa">${label}</span>`;
+  }
+
+  // ---- replies ------------------------------------------------------------------
+  function quoteName(q) {
+    if (q.fromMe) return myDisplayName();
+    if (!isGroup) return contactName;
+    return q.senderName || 'Participante';
+  }
+
+  function quoteHtml(q) {
+    if (!q) return '';
+    const label = q.media === 'video' ? '🎬 Vídeo' : q.media === 'sticker' ? 'Figurinha' : '📷 Foto';
+    const body = q.media ? (q.caption || label) : q.text;
+    const text = body ? messageHtml(body.length > 160 ? body.slice(0, 160) + '…' : body) : '<i>mensagem</i>';
+    const pic = q.media ? `<img class="qthumb${q.media === 'sticker' ? ' qsticker' : ''}" alt=""${q.thumb ? ` src="${q.thumb}"` : ''}>` : '';
+    return `<div class="quote${q.media ? ' has-pic' : ''}" title="Ir para a mensagem">${pic}<div class="qbody"><b>${escapeHtml(quoteName(q))}</b> disse:<span class="qt">${text}</span></div></div>`;
+  }
+
+  // quotes without an embedded preview (stickers, older messages): use the
+  // original message's media when we have it
+  function fillQuotePic(el, q) {
+    const img = el.querySelector('.qthumb');
+    if (!img) return;
+    if (img.getAttribute('src')) return;
+    if (q.media === 'video') return img.remove(); // only the embedded still is an image
+    const load = (src) => { if (src) img.src = src; else img.remove(); };
+    (window.msn.mediaCached?.(q.id) || Promise.resolve(null)).then((src) => {
+      if (src) return load(src);
+      if (!autoDownload) return img.remove();
+      window.msn.media(q.id).then(load).catch(() => img.remove());
+    });
+  }
+
+  function jumpTo(id) {
+    const target = id && historyEl.querySelector(`.msg-block[data-id="${CSS.escape(id)}"]`);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center' });
+    target.classList.remove('flash');
+    void target.offsetWidth;
+    target.classList.add('flash');
+  }
+
+  let replyTo = null;
+  function startReply(m) {
+    replyTo = m;
+    const who = m.fromMe ? myDisplayName() : isGroup ? m.senderNick || m.senderName : contactName;
+    const preview = m.media && !m.caption ? (m.media === 'video' ? '🎬 vídeo' : m.media === 'sticker' ? 'figurinha' : '📷 foto') : m.text;
+    document.getElementById('replyText').textContent = `Respondendo a ${who}: ${preview}`;
+    document.getElementById('replyBar').hidden = false;
+    inputEl.focus();
+  }
+  function cancelReply() {
+    replyTo = null;
+    document.getElementById('replyBar').hidden = true;
+  }
+  document.getElementById('replyClose').addEventListener('click', cancelReply);
+  inputEl.addEventListener('keydown', (e) => { if (e.key === 'Escape' && replyTo) cancelReply(); });
+
+  function fmtDuration(sec) {
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  }
+
+  /** Video: WhatsApp's embedded still with a play button; downloads and plays inline on click. */
+  function loadVideo(m, holder) {
+    const box = document.createElement('div');
+    box.className = 'video-thumb';
+    box.title = 'Reproduzir vídeo';
+    box.innerHTML = `<img src="${m.thumb || ''}" alt=""><div class="play"><span>▶</span></div>` +
+      (m.duration ? `<div class="dur">${fmtDuration(m.duration)}</div>` : '');
+    holder.prepend(box);
+    box.addEventListener('click', () => {
+      box.querySelector('.play span').textContent = '…';
+      window.msn.media(m.id).then((src) => {
+        if (!src) {
+          box.replaceWith(Object.assign(document.createElement('div'), { textContent: '🎬 <vídeo indisponível>' }));
+          return;
+        }
+        const video = Object.assign(document.createElement('video'), { src, controls: true, autoplay: true });
+        video.addEventListener('dblclick', () => window.msn.openExternal(src));
+        box.replaceWith(video);
+      }).catch(() => {});
+    }, { once: true });
+  }
+
+  // photos load on their own unless "baixar mídia automaticamente" is off;
+  // stickers are tiny and always load
+  let autoDownload = true;
+  window.msn.getMediaOptions?.().then((o) => { autoDownload = o.autoDownload !== false; });
+  window.msn.onMediaOptions?.((o) => { autoDownload = o.autoDownload !== false; });
+
+  async function loadMedia(m, holder) {
+    if (m.media === 'video') return loadVideo(m, holder);
+    const placeholder = document.createElement('div');
+    placeholder.textContent = m.media === 'sticker' ? '<figurinha>' : '📷 Carregando foto...';
+    holder.prepend(placeholder);
+    if (m.media === 'image' && !autoDownload && !(await window.msn.mediaCached?.(m.id))) {
+      placeholder.innerHTML = '📷 Foto - <span class="dl-link">clique para baixar</span>';
+      placeholder.querySelector('.dl-link').addEventListener('click', () => {
+        placeholder.textContent = '📷 Carregando foto...';
+        showPhoto(m, placeholder);
+      }, { once: true });
+      return;
+    }
+    showPhoto(m, placeholder);
+  }
+
+  function showPhoto(m, placeholder) {
+    window.msn.media(m.id).then((src) => {
+      if (!src) {
+        placeholder.textContent = m.media === 'sticker' ? '<figurinha>' : '📷 <foto indisponível>';
+        return;
+      }
+      const img = Object.assign(document.createElement('img'), {
+        src,
+        className: m.media === 'sticker' ? 'sticker' : 'photo',
+      });
+      if (m.media === 'image') img.addEventListener('click', () => window.msn.openExternal(src));
+      img.addEventListener('load', () => { historyEl.scrollTop = historyEl.scrollHeight; });
+      placeholder.replaceWith(img);
+    }).catch(() => {});
+  }
+
+  function myDisplayName() {
+    return Profile.get().nick || waMe?.name || 'Eu';
+  }
+
+  function applyProfile() {
+    document.getElementById('myDp').src = Profile.get().dp || waMyDp || 'assets/wlm85/avatar-default.png';
+    document.querySelectorAll('.msg-who[data-me] .who').forEach((el) => { el.textContent = myDisplayName(); });
+  }
+  Profile.onChange(applyProfile);
+
+  const MY_FRAME = { online: 'frame-online', busy: 'frame-busy', away: 'frame-away', offline: 'frame-offline' };
+  const showMyStatus = (s) => { if (MY_FRAME[s]) document.getElementById('myFrame').src = `assets/wlm85/${MY_FRAME[s]}.png`; };
+  window.msn.getStatus().then(showMyStatus);
+  window.msn.onStatus(showMyStatus);
+
+  async function init() {
+    const data = await window.msn.getMessages(jid);
+    waMe = data.me;
+    contactName = jid === data.me?.jid ? `${myDisplayName()} (você)` : data.name;
+    lastIncoming = data.lastIncoming;
+    busyInfo = { about: data.about, lastOutgoing: data.lastOutgoing, directIncoming: data.directIncoming };
+    document.title = `${contactName} - Conversa`;
+    document.getElementById('winTitle').textContent = contactName;
+    document.getElementById('toAddr').textContent = isGroup || isAi ? '' : `<+${jid.replace(/@.*/, '')}>`;
+    data.messages.forEach(appendMessage);
+    updatePresence(data.presence);
+    if (isGroup) renderMembers();
+    window.msn.markRead(jid);
+
+    window.msn.avatar(jid).then((url) => { if (url) document.getElementById('theirDp').src = url; });
+    applyProfile();
+    if (data.me?.jid) window.msn.avatar(data.me.jid).then((url) => { waMyDp = url; applyProfile(); });
+  }
+
+  const STATUS_ICON = { online: 'status16-online', busy: 'status16-busy', away: 'status16-away', offline: 'status16-invisible' };
+  const STATUS_TEXT = { busy: 'Ocupado', away: 'Ausente', offline: 'Offline' };
+
+  function updatePresence(presence = lastPresence) {
+    lastPresence = presence;
+    if (isGroup) {
+      document.getElementById('titleIcon').src = 'assets/wlm85/status16-online.png';
+      awayNotice.hidden = true;
+      return;
+    }
+    // an AI is always there; the busy/away rules are about people
+    const status = isAi ? 'online' : Activity.statusOf({ presence, lastIncoming, ...busyInfo });
+    document.getElementById('theirFrame').src = `assets/wlm85/frame-${status === 'online' ? 'online' : status}.png`;
+    document.getElementById('titleIcon').src = `assets/wlm85/${STATUS_ICON[status]}.png`;
+    if (status === 'online') {
+      awayNotice.hidden = true;
+    } else {
+      document.getElementById('awayText').textContent =
+        `${contactName} pode não responder porque o status dele(a) está definido como ${STATUS_TEXT[status]}.`;
+      awayNotice.hidden = false;
+    }
+  }
+
+  // ---- group side panel -----------------------------------------------------
+  async function renderMembers() {
+    // online first, then away, then offline; alphabetical inside each
+    // (by title/nick; people known only by number go last)
+    const RANK = { online: 0, busy: 1, away: 2, offline: 3 };
+    const members = (await window.msn.groupMembers(jid)).sort((a, b) => {
+      const ra = RANK[Activity.statusOf(a)] ?? 3;
+      const rb = RANK[Activity.statusOf(b)] ?? 3;
+      if (ra !== rb) return ra - rb;
+      const ka = a.title || a.nick || '\uffff' + a.jid;
+      const kb = b.title || b.nick || '\uffff' + b.jid;
+      return ka.localeCompare(kb, 'pt-BR', { sensitivity: 'base', numeric: true });
+    });
+    document.getElementById('memberCount').textContent = `(${members.length + 1})`;
+    const list = document.getElementById('memberList');
+    list.replaceChildren();
+    for (const mb of members) {
+      const status = Activity.statusOf(mb);
+      const row = document.createElement('div');
+      row.className = 'member' + (typingNow?.has(mb.jid) ? ' typing' : '');
+      row.dataset.jid = mb.jid;
+      const nick = mb.nick ? escapeHtml(mb.nick) : '';
+      const title = mb.title ? escapeHtml(mb.title) : '';
+      const phone = mb.jid.endsWith('@s.whatsapp.net') ? fmtPhone(mb.jid) : '';
+      const inside = [nick, phone].filter(Boolean).join(' - ');
+      const label = title
+        ? `${title}${inside ? ` (${inside})` : ''}`
+        : phone ? (nick ? `${nick} (${phone})` : `(${phone})`) : nick || 'Participante';
+      row.innerHTML = `<img src="assets/wlm85/${STATUS_ICON[status]}.png" alt=""><span>${label}` +
+        (status === 'online' ? '' : ` <span class="st">(${STATUS_TEXT[status]})</span>`) + '</span>';
+      row.title = row.querySelector('span').textContent + (mb.jid.endsWith('@s.whatsapp.net') ? '\nClique duas vezes para conversar' : '');
+      if (mb.jid.endsWith('@s.whatsapp.net')) {
+        row.addEventListener('dblclick', () => window.msn.openChat(mb.jid));
+      }
+      list.appendChild(row);
+    }
+  }
+  if (isGroup) {
+    document.querySelector('.wlm-window').classList.add('group');
+    const members = document.getElementById('members');
+    members.hidden = false;
+    // the group's photo, small and in a neutral frame, above the participants
+    const groupDp = document.getElementById('theirDpBox');
+    groupDp.classList.add('group-dp');
+    groupDp.querySelector('.wlm-dp').classList.add('small');
+    document.getElementById('theirFrame').src = 'assets/wlm85/frame-neutral.png';
+    members.before(groupDp);
+  }
+  // statuses decay with time
+  setInterval(() => (isGroup ? renderMembers() : updatePresence()), 60 * 1000);
+
+  // ---- features WhatsApp doesn't have -------------------------------------------
+  function unavailable(what) {
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <div class="xp-dialog">
+        <div class="xp-dialog-title">Ruindows Live Messenger</div>
+        <div class="xp-dialog-body"><img src="assets/wlm85/information.png" width="16" height="16"><div>${escapeHtml(what)} não está disponível em conversas ${isAi ? 'com IAs' : 'do WhatsApp'}.</div></div>
+        <div class="xp-dialog-buttons"><button class="wlm-button">OK</button></div>
+      </div>`;
+    overlay.querySelector('button').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+  document.querySelectorAll('.unavailable').forEach((el) => {
+    const what = el.title || el.dataset.tip;
+    el.addEventListener('click', () => unavailable(what));
+  });
+
+  // ---- my message font (the "A" button), like Messenger's "Alterar fonte" ------
+  // Family, size and colour are how *I* see my messages (WhatsApp can't carry
+  // them); bold/italic also go out as WhatsApp *bold* / _italic_.
+  const DEFAULT_FONT = { family: '', size: 10, bold: false, italic: false, color: '#1e1e1e' };
+  const myFont = () => ({ ...DEFAULT_FONT, ...(Profile.get().msgFont || {}) });
+  const fmt = { get bold() { return myFont().bold; }, get italic() { return myFont().italic; } };
+
+  function applyMyFont() {
+    const f = myFont();
+    const root = document.documentElement.style;
+    root.setProperty('--my-font', f.family ? `"${f.family}", var(--wlm-font)` : 'var(--wlm-font)');
+    root.setProperty('--my-size', `${Math.round(f.size * 1.333)}px`);
+    root.setProperty('--my-weight', f.bold ? 'bold' : 'normal');
+    root.setProperty('--my-style', f.italic ? 'italic' : 'normal');
+    root.setProperty('--my-color', f.color);
+  }
+  applyMyFont();
+  Profile.onChange(applyMyFont);
+
+  const FONT_COLORS = [
+    ['Preto', '#1e1e1e'], ['Cinza', '#7f7f7f'], ['Bordô', '#800000'], ['Vermelho', '#ff0000'],
+    ['Laranja', '#e36c09'], ['Oliva', '#808000'], ['Amarelo', '#c8a000'], ['Verde', '#008000'],
+    ['Verde-limão', '#3cb000'], ['Azul-petróleo', '#008080'], ['Azul-piscina', '#00a0d0'], ['Azul-marinho', '#000080'],
+    ['Azul', '#0050ff'], ['Roxo', '#800080'], ['Fúcsia', '#d000a0'], ['Marrom', '#663300'],
+  ];
+  const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28];
+  const FONT_STYLES = [['Normal', false, false], ['Itálico', false, true], ['Negrito', true, false], ['Negrito Itálico', true, true]];
+
+  async function openFontDialog() {
+    const fonts = await window.msn.systemFonts();
+    const cur = myFont();
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <form class="xp-dialog font-dialog">
+        <div class="xp-dialog-title">Alterar Fonte</div>
+        <div class="font-grid">
+          <label>Fonte:<input name="family" autocomplete="off"><select name="familyList" size="7"></select></label>
+          <label>Estilo da fonte:<input name="styleText" readonly><select name="fstyle" size="7"></select></label>
+          <label>Tamanho:<input name="sizeText" readonly><select name="size" size="7"></select></label>
+        </div>
+        <div class="font-lower">
+          <label>Cor:<select name="color"></select></label>
+          <fieldset><legend>Exemplo</legend><div class="font-sample">AaBbYyZz</div></fieldset>
+        </div>
+        <div class="font-note">Fonte, tamanho e cor mudam como as suas mensagens aparecem aqui; negrito e itálico também vão pelo WhatsApp.</div>
+        <div class="xp-dialog-buttons">
+          <button class="wlm-button" type="submit">OK</button>
+          <button class="wlm-button" type="button" data-cancel>Cancelar</button>
+        </div>
+      </form>`;
+    const form = overlay.querySelector('form');
+    const sample = overlay.querySelector('.font-sample');
+    const famList = form.familyList;
+    const SYSTEM = 'Padrão (Segoe UI)';
+    for (const name of [SYSTEM, ...fonts]) {
+      famList.add(new Option(name, name === SYSTEM ? '' : name));
+    }
+    FONT_STYLES.forEach(([label], i) => form.fstyle.add(new Option(label, i)));
+    FONT_SIZES.forEach((n) => form.size.add(new Option(n, n)));
+    for (const [label, hex] of FONT_COLORS) {
+      const o = new Option(label, hex);
+      o.style.color = hex;
+      form.color.add(o);
+    }
+    const state = { ...cur };
+    const sync = () => {
+      famList.value = state.family;
+      form.family.value = state.family || SYSTEM;
+      const si = FONT_STYLES.findIndex(([, b, i]) => b === state.bold && i === state.italic);
+      form.fstyle.value = si;
+      form.styleText.value = FONT_STYLES[si][0];
+      form.size.value = state.size;
+      form.sizeText.value = state.size;
+      if (![...form.color.options].some((o) => o.value === state.color)) form.color.add(new Option(state.color, state.color));
+      form.color.value = state.color;
+      form.color.style.color = state.color;
+      Object.assign(sample.style, {
+        fontFamily: state.family ? `"${state.family}"` : 'var(--wlm-font)',
+        fontSize: `${Math.round(state.size * 1.333)}px`,
+        fontWeight: state.bold ? 'bold' : 'normal',
+        fontStyle: state.italic ? 'italic' : 'normal',
+        color: state.color,
+      });
+    };
+    famList.addEventListener('change', () => { state.family = famList.value; sync(); });
+    form.family.addEventListener('input', () => {
+      // type-ahead, like the Windows font box
+      const q = form.family.value.toLowerCase();
+      const hit = [...famList.options].find((o) => o.text.toLowerCase().startsWith(q));
+      if (hit) { famList.value = hit.value; hit.scrollIntoView({ block: 'nearest' }); state.family = hit.value; }
+      const pos = form.family.selectionStart;
+      sync();
+      form.family.value = form.family.value; form.family.setSelectionRange(pos, pos);
+    });
+    form.fstyle.addEventListener('change', () => { const [, b, i] = FONT_STYLES[form.fstyle.value]; state.bold = b; state.italic = i; sync(); });
+    form.size.addEventListener('change', () => { state.size = Number(form.size.value); sync(); });
+    form.color.addEventListener('change', () => { state.color = form.color.value; sync(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      Profile.set({ msgFont: { ...state } });
+      overlay.remove();
+      inputEl.focus();
+    });
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    sync();
+    famList.options[famList.selectedIndex]?.scrollIntoView({ block: 'center' });
+  }
+  document.getElementById('fontBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openFontDialog();
+  });
+
+  // ---- handwriting tab --------------------------------------------------------
+  const inputRow = document.getElementById('inputRow');
+  const ink = document.getElementById('inkCanvas');
+  const inkCtx = ink.getContext('2d');
+  let inkMode = false;
+  let inkDirty = false;
+  let drawing = false;
+
+  function sizeInk() {
+    ink.width = ink.clientWidth || 400;
+    inkCtx.fillStyle = '#fff';
+    inkCtx.fillRect(0, 0, ink.width, ink.height);
+    inkCtx.strokeStyle = '#1a1a6e';
+    inkCtx.lineWidth = 2.2;
+    inkCtx.lineCap = 'round';
+    inkDirty = false;
+  }
+  ink.addEventListener('mousedown', (e) => {
+    drawing = true;
+    inkDirty = true;
+    sendBtn.disabled = false;
+    inkCtx.beginPath();
+    inkCtx.moveTo(e.offsetX, e.offsetY);
+  });
+  ink.addEventListener('mousemove', (e) => {
+    if (!drawing) return;
+    inkCtx.lineTo(e.offsetX, e.offsetY);
+    inkCtx.stroke();
+  });
+  window.addEventListener('mouseup', () => (drawing = false));
+
+  function setInkMode(on) {
+    inkMode = on;
+    inputRow.classList.toggle('ink', on);
+    document.getElementById('inkTab').classList.toggle('active', on);
+    document.getElementById('textTab').classList.toggle('active', !on);
+    if (on) sizeInk();
+    else inputEl.focus();
+    updateSendBtn();
+  }
+  document.getElementById('inkTab').addEventListener('click', () => setInkMode(true));
+  document.getElementById('textTab').addEventListener('click', () => setInkMode(false));
+
+  // ---- sending ----------------------------------------------------------
+  let lastTypingSent = 0;
+  let typingTimer = null;
+
+  function updateSendBtn() {
+    sendBtn.disabled = inkMode ? !inkDirty : !inputEl.value.trim();
+  }
+
+  function wrapFormatting(text) {
+    let out = text;
+    if (fmt.bold) out = `*${out}*`;
+    if (fmt.italic) out = `_${out}_`;
+    return out;
+  }
+
+  function send() {
+    if (inkMode) {
+      if (!inkDirty) return;
+      const dataUrl = ink.toDataURL('image/png');
+      sizeInk();
+      updateSendBtn();
+      if (isAi) return unavailable('Escrita à mão');
+      window.msn.sendImage(jid, dataUrl).then(appendMessage);
+      return;
+    }
+    const text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = '';
+    updateSendBtn();
+    window.msn.typing(jid, false);
+    const quotedId = replyTo?.id;
+    cancelReply();
+    window.msn.send(jid, wrapFormatting(emoticonize(text)), quotedId).then(appendMessage);
+  }
+
+  function sendNudge() {
+    if (isAi) return unavailable('Chamar a atenção');
+    try { Sounds.nudge(); } catch {}
+    window.msn.nudge(jid).then(appendMessage);
+  }
+
+  function sendFile() {
+    if (isAi) return unavailable('Enviar arquivos');
+    window.msn.sendFile(jid).then((m) => m && appendMessage(m));
+  }
+
+  sendBtn.addEventListener('click', send);
+  document.getElementById('sendFilesBtn').addEventListener('click', sendFile);
+  document.getElementById('nudgeBtn').addEventListener('click', sendNudge);
+  document.getElementById('searchBtn').addEventListener('click', () => {
+    const sel = String(window.getSelection()).trim();
+    window.msn.openExternal(sel ? 'https://www.bing.com/search?q=' + encodeURIComponent(sel) : 'https://www.bing.com');
+  });
+
+  // 8.5 hid the classic menu bar behind this button
+  // group of AIs: how they answer, and letting them keep talking
+  const isAiGroup = jid.startsWith('ai:group:');
+  async function aiGroupItems() {
+    if (!isAiGroup) return [];
+    const g = (await window.msn.aiGroups()).find((x) => x.jid === jid);
+    if (!g) return [];
+    const mode = (m, label) => ({ label: (g.mode === m ? '✓ ' : '') + label, action: () => window.msn.aiGroupUpdate(jid, { mode: m }) });
+    return [
+      { label: 'Mais uma rodada entre elas', action: () => window.msn.aiGroupContinue(jid), disabled: g.busy },
+      mode('round', 'Respondem todas juntas'),
+      mode('chain', 'Respondem em sequência'),
+      { sep: true },
+    ];
+  }
+
+  document.getElementById('menuBtn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    Menus.popup([
+      ...(await aiGroupItems()),
+      { label: 'Enviar um arquivo ou foto...', action: sendFile },
+      { label: 'Chamar a atenção', action: sendNudge },
+      { sep: true },
+      { label: 'Copiar', action: () => document.execCommand('copy') },
+      { label: 'Colar', action: () => { inputEl.focus(); document.execCommand('paste'); } },
+      { label: 'Selecionar tudo', action: () => { inputEl.focus(); inputEl.select(); } },
+      { sep: true },
+      { label: 'Sobre o Ruindows Live Messenger', action: () => Menus.showAbout() },
+      { label: 'Fechar', action: () => window.msn.close() },
+    ], r.right - 210, r.bottom + 2);
+  });
+
+  inputEl.addEventListener('input', updateSendBtn);
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+      return;
+    }
+    const now = Date.now();
+    if (now - lastTypingSent > 2500) {
+      lastTypingSent = now;
+      window.msn.typing(jid, true);
+    }
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => window.msn.typing(jid, false), 4000);
+  });
+
+  // ---- emoticon / sticker palette ---------------------------------------------
+  // Two tabs on the emoticon button: Messenger emoticons, and my WhatsApp
+  // stickers (favorites synced from the phone, then recently seen ones).
+  const palette = document.getElementById('palette');
+  palette.innerHTML =
+    '<div class="pal-tabs"><span data-tab="emo" class="on">Emoticons</span><span data-tab="stk">Figurinhas</span></div>' +
+    '<div class="pal-grid emo" id="palEmo"></div><div class="pal-grid stk" id="palStk" hidden></div>';
+  const palEmo = document.getElementById('palEmo');
+  const palStk = document.getElementById('palStk');
+  for (const [code, src, name] of EMOTICON_PALETTE) {
+    const s = document.createElement('span');
+    s.title = `${name} ${code}`;
+    s.innerHTML = `<img src="${src}" alt="">`;
+    s.addEventListener('click', () => {
+      inputEl.value += (inputEl.value && !inputEl.value.endsWith(' ') ? ' ' : '') + code + ' ';
+      palette.style.display = 'none';
+      updateSendBtn();
+      inputEl.focus();
+    });
+    palEmo.appendChild(s);
+  }
+
+  let stickersLoaded = false;
+  async function loadStickers() {
+    stickersLoaded = true;
+    const { favorites, recent } = await window.msn.stickers();
+    palStk.replaceChildren();
+    const section = (title, list) => {
+      if (!list.length) return;
+      palStk.appendChild(Object.assign(document.createElement('div'), { className: 'pal-section', textContent: title }));
+      for (const ref of list) {
+        const cell = document.createElement('span');
+        cell.title = 'Enviar figurinha';
+        palStk.appendChild(cell);
+        window.msn.stickerFile(ref).then((src) => {
+          if (!src) { cell.remove(); return; }
+          cell.innerHTML = `<img src="${src}" alt="">`;
+          placePalette();
+        });
+        cell.addEventListener('click', () => {
+          palette.style.display = 'none';
+          if (isAi) return unavailable('Enviar figurinhas');
+          window.msn.sendSticker(jid, ref).then(appendMessage).catch(() => alert('Não foi possível enviar essa figurinha.'));
+        });
+      }
+    };
+    section('Favoritas', favorites);
+    section('Recentes', recent);
+    placePalette();
+    if (!favorites.length && !recent.length) {
+      palStk.appendChild(Object.assign(document.createElement('div'), {
+        className: 'pal-empty',
+        textContent: 'Nenhuma figurinha ainda. As favoritas do seu WhatsApp aparecem aqui depois da sincronização.',
+      }));
+    }
+    placePalette();
+  }
+  window.msn.onStickers?.(() => { stickersLoaded = false; if (!palStk.hidden && palette.style.display === 'block') loadStickers(); });
+
+  function showTab(tab) {
+    palette.querySelectorAll('.pal-tabs span').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab));
+    palEmo.hidden = tab !== 'emo';
+    palStk.hidden = tab !== 'stk';
+    if (tab === 'stk' && !stickersLoaded) loadStickers();
+    placePalette();
+  }
+  palette.querySelectorAll('.pal-tabs span').forEach((t) => t.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showTab(t.dataset.tab);
+  }));
+
+  let paletteAnchor = null;
+  function placePalette() {
+    if (!paletteAnchor) return;
+    const pr = palette.getBoundingClientRect();
+    palette.style.left = Math.max(4, Math.min(paletteAnchor.left, window.innerWidth - pr.width - 4)) + 'px';
+    palette.style.top = Math.max(4, paletteAnchor.top - pr.height - 2) + 'px';
+  }
+  document.getElementById('emoBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    paletteAnchor = e.currentTarget.getBoundingClientRect();
+    const open = palette.style.display !== 'block';
+    palette.style.display = open ? 'block' : 'none';
+    if (open) placePalette();
+  });
+  document.addEventListener('click', (e) => {
+    if (!palette.contains(e.target)) palette.style.display = 'none';
+  });
+
+  // ---- live events ----------------------------------------------------------
+
+  window.msn.onMessage((m) => {
+    if (m.chatJid !== jid) return;
+    appendMessage(m);
+    if (!m.fromMe) {
+      const typingKey = isGroup ? m.senderPn || m.senderJid : jid;
+      if (typingNow.has(typingKey)) { clearTimeout(typingNow.get(typingKey).timer); typingNow.delete(typingKey); }
+      lastIncoming = m.timestamp / 1000;
+      if (!isGroup) busyInfo.directIncoming = m.timestamp / 1000;
+      isGroup ? renderMembers() : updatePresence();
+      window.msn.markRead(jid);
+      try { m.isNudge ? Sounds.nudge() : Sounds.message(); } catch {}
+    }
+  });
+
+  // who is typing right now; groups can have several people at once
+  const typingNow = new Map(); // participant jid -> { name, kind, timer }
+
+  function showTyping() {
+    if (!typingNow.size) { statusBar.textContent = lastReceivedText; return; }
+    if (!isGroup) {
+      const t = [...typingNow.values()][0];
+      statusBar.textContent = t.kind === 'recording'
+        ? `${contactName} está gravando um áudio...`
+        : `${contactName} está digitando uma mensagem...`;
+      return;
+    }
+    const names = [...typingNow.values()].map((t) => t.name);
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`;
+    const recording = [...typingNow.values()].every((t) => t.kind === 'recording');
+    statusBar.textContent = `${list} ${names.length > 1 ? 'estão' : 'está'} ${recording ? 'gravando um áudio' : 'digitando'} no grupo...`;
+  }
+
+  window.msn.onPresence(({ jid: pj, presence, participant, participantName }) => {
+    if (pj !== jid) return;
+    if (!isGroup) updatePresence(presence);
+    const key = isGroup ? participant || 'alguem' : jid;
+    const prev = typingNow.get(key);
+    clearTimeout(prev?.timer);
+    if (presence === 'composing' || presence === 'recording') {
+      typingNow.set(key, {
+        name: participantName || 'Alguém',
+        kind: presence,
+        // WhatsApp doesn't always send "paused"; give up after a while
+        timer: setTimeout(() => { typingNow.delete(key); showTyping(); markTypingMembers(); }, 10000),
+      });
+    } else {
+      typingNow.delete(key);
+    }
+    showTyping();
+    markTypingMembers();
+  });
+
+  // a pencil next to whoever is typing in the participant panel
+  function markTypingMembers() {
+    if (!isGroup) return;
+    document.querySelectorAll('.member').forEach((row) => {
+      row.classList.toggle('typing', typingNow.has(row.dataset.jid));
+    });
+  }
+
+  init();
+  inputEl.focus();
+</script>
+</body>
+</html>

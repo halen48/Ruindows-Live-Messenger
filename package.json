@@ -1,0 +1,60 @@
+{
+  "name": "ruindows-live-messenger",
+  "version": "1.0.0",
+  "description": "Ruindows Live Messenger: WhatsApp (via Baileys) e IAs vestidos de Windows Live Messenger 8.5",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "node scripts/patch-baileys.js",
+    "dist:linux": "npx --yes electron-builder@25.1.8 --linux AppImage deb --publish never",
+    "dist:win": "npx --yes electron-builder@25.1.8 --win nsis portable --publish never",
+    "dist:mac": "npx --yes electron-builder@25.1.8 --mac dmg --publish never"
+  },
+  "author": "halen48",
+  "license": "MIT",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
+    "https-proxy-agent": "^7.0.6",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  },
+  "build": {
+    "appId": "com.ruindows.livemessenger",
+    "productName": "Ruindows Live Messenger",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!src/**/*.md"
+    ],
+    "icon": "src/renderer/assets/wlm85/app-icon.png",
+    "linux": {
+      "category": "Network;InstantMessaging",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [
+        "dmg"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

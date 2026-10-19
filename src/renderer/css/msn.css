@@ -1,0 +1,366 @@
+/* =========================================================================
+   MSN Messenger (6/7-era, Windows XP "Luna") look and feel.
+   Every window is frameless; the Luna chrome is drawn here.
+   ========================================================================= */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+:root {
+  --luna-border: #0831d9;
+  --xp-face: #ece9d8;
+  --msn-panel-border: #b9d0e8;
+  --msn-blue-dark: #4a71a8;
+  --msn-text: #1a1a1a;
+  --msn-gray: #808080;
+}
+
+html, body {
+  height: 100%;
+  font-family: Tahoma, 'Segoe UI', Verdana, sans-serif;
+  font-size: 11px;
+  color: var(--msn-text);
+  background: transparent;
+  overflow: hidden;
+  /* 2003 didn't smooth its Tahoma; get as close as each platform allows */
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  text-rendering: optimizeSpeed;
+  letter-spacing: 0;
+  user-select: none;
+  cursor: default;
+}
+
+/* ---- XP Luna window chrome --------------------------------------------- */
+
+.xp-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 2px 4px 12px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.xp-titlebar {
+  flex: none;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 5px 0 6px;
+  gap: 5px;
+  -webkit-app-region: drag;
+  background: linear-gradient(
+    180deg,
+    #0997ff 0%,
+    #0053ee 8%,
+    #0050ee 40%,
+    #0066ff 88%,
+    #0066ff 93%,
+    #005bff 95%,
+    #003dd7 96%,
+    #003dd7 100%
+  );
+  border-radius: 8px 8px 0 0;
+}
+
+.xp-titlebar .title-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.xp-titlebar .title-text {
+  flex: 1;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 1px #0f1089;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-bottom: 1px;
+}
+
+.xp-controls {
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.xp-controls button {
+  width: 21px;
+  height: 21px;
+  border: 1px solid #fff;
+  border-radius: 3px;
+  font-family: Tahoma, sans-serif;
+  font-size: 10px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 40, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(180deg, #7ba4e8 0%, #3a6cd8 45%, #1e50c8 50%, #2f61d8 100%);
+  box-shadow: inset 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+.xp-controls button:hover { filter: brightness(1.15); }
+.xp-controls button:active { filter: brightness(0.85); }
+
+.xp-controls button.close {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(180deg, #f0a08c 0%, #e05a3c 45%, #c83a1e 50%, #d8502f 100%);
+}
+
+.xp-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--xp-face);
+  border-left: 3px solid var(--luna-border);
+  border-right: 3px solid var(--luna-border);
+  border-bottom: 3px solid var(--luna-border);
+}
+
+/* ---- Menu bar ----------------------------------------------------------- */
+
+.menubar {
+  flex: none;
+  display: flex;
+  padding: 2px 4px;
+  background: linear-gradient(180deg, #fcfcfa, #ece9d8);
+  border-bottom: 1px solid #d8d2bd;
+}
+
+.menubar span {
+  padding: 2px 7px;
+  border-radius: 2px;
+}
+
+.menubar span:hover { background: #316ac5; color: #fff; }
+.menubar span u { text-decoration: underline; }
+
+/* ---- MSN gradient panels & content ------------------------------------- */
+
+.msn-surface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: linear-gradient(180deg, #ffffff 0%, #dbeaf9 45%, #cfe1f4 100%);
+  position: relative;
+}
+
+/* the big soft diagonal swoosh in the background */
+.msn-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 120% 90% at 110% 110%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 55%),
+    radial-gradient(ellipse 90% 70% at -10% -20%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 60%);
+  pointer-events: none;
+}
+
+.msn-surface > * { position: relative; }
+
+.white-panel {
+  background: #fff;
+  border: 1px solid var(--msn-panel-border);
+  border-radius: 6px;
+}
+
+/* ---- XP push buttons ----------------------------------------------------- */
+
+.xp-button {
+  font-family: Tahoma, sans-serif;
+  font-size: 11px;
+  color: #1a1a1a;
+  padding: 4px 14px;
+  min-width: 70px;
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f2ea 50%, #e5e5d7 90%, #d8d8c8 100%);
+  box-shadow: inset 0 -2px 3px rgba(190, 190, 160, 0.5), inset 0 1px 0 #fff;
+}
+
+.xp-button:hover {
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 190, 90, 0.75),
+    inset 0 -2px 3px rgba(190, 190, 160, 0.5);
+}
+
+.xp-button:active {
+  background: linear-gradient(180deg, #d8d8c8, #eeeee2);
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.xp-button:disabled { color: #a0a0a0; border-color: #b0b0a0; }
+
+/* ---- Links, notices ------------------------------------------------------ */
+
+a, .link { color: #0044cc; text-decoration: underline; cursor: pointer; }
+
+.notice-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #ffffe1;
+  border: 1px solid #e2dfae;
+  border-radius: 3px;
+  color: #333;
+}
+
+.notice-bar img { width: 14px; height: 14px; flex: none; margin-top: 1px; }
+
+/* ---- Scrollbars (XP flavoured) ------------------------------------------ */
+
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-track { background: #f0f6fc; border-left: 1px solid #dce8f4; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #cfdff6 0%, #b4cef0 45%, #98bbe8 100%);
+  border: 1px solid #7da2ce;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-button:single-button {
+  background: linear-gradient(180deg, #e6f0fb, #bcd4f2);
+  border: 1px solid #7da2ce;
+  border-radius: 3px;
+  height: 16px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3.5 0L7 4H0z' fill='%232b57a0'/%3E%3C/svg%3E");
+}
+::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3.5 4L0 0h7z' fill='%232b57a0'/%3E%3C/svg%3E");
+}
+
+/* ---- Text inputs ---------------------------------------------------------- */
+
+input[type='text'], textarea {
+  font-family: Tahoma, sans-serif;
+  font-size: 12px;
+  border: 1px solid #7f9db9;
+  background: #fff;
+  outline: none;
+  user-select: text;
+  cursor: text;
+}
+
+/* ---- XP drop-down / context menus ---------------------------------------- */
+
+.xp-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 150px;
+  background: #fff;
+  border: 1px solid #aca899;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.35);
+  padding: 2px;
+}
+
+.xp-menu-item {
+  padding: 4px 18px 4px 22px;
+  white-space: nowrap;
+}
+
+.xp-menu-item:hover:not(.disabled) { background: #316ac5; color: #fff; }
+.xp-menu-item.disabled { color: #aca899; }
+
+.xp-menu-sep {
+  height: 1px;
+  background: #d8d2bd;
+  margin: 3px 2px 3px 22px;
+}
+
+.menubar span.open { background: #316ac5; color: #fff; }
+
+/* ---- yellow XP tooltip ------------------------------------------------------ */
+
+.xp-tooltip {
+  position: fixed;
+  z-index: 200;
+  background: #ffffe1;
+  border: 1px solid #000;
+  padding: 2px 5px;
+  font-size: 11px;
+  color: #000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ---- modal dialog ------------------------------------------------------------ */
+
+.xp-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xp-dialog {
+  background: var(--xp-face);
+  border: 1px solid #0831d9;
+  border-radius: 4px;
+  box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.4);
+  min-width: 260px;
+}
+
+.xp-dialog-title {
+  background: linear-gradient(180deg, #0997ff, #0053ee 30%, #003dd7);
+  color: #fff;
+  font-weight: bold;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  padding: 4px 8px;
+  border-radius: 3px 3px 0 0;
+}
+
+.xp-dialog-body {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px 12px;
+  line-height: 1.5;
+}
+
+.xp-dialog-buttons { text-align: center; padding: 0 12px 12px; }
+
+/* ---- resize grip -------------------------------------------------------------- */
+
+.grip {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 13px;
+  height: 13px;
+  background:
+    radial-gradient(circle 1.5px at 10px 10px, #9a9784 99%, transparent),
+    radial-gradient(circle 1.5px at 10px 5px,  #9a9784 99%, transparent),
+    radial-gradient(circle 1.5px at 5px 10px,  #9a9784 99%, transparent),
+    radial-gradient(circle 1.5px at 10px 0px,  #9a9784 99%, transparent),
+    radial-gradient(circle 1.5px at 0px 10px,  #9a9784 99%, transparent),
+    radial-gradient(circle 1.5px at 5px 5px,   #9a9784 99%, transparent);
+}
+
+/* ---- inline emoticon bitmaps --------------------------------------------------- */
+
+img.emo { width: 19px; height: 19px; vertical-align: -5px; image-rendering: pixelated; }
+
+/* ---- Status colours -------------------------------------------------------- */
+
+.status-suffix { color: var(--msn-gray); font-weight: normal; }
+.status-suffix.away { color: #b08820; }
+.personal-message { color: var(--msn-gray); font-style: italic; }

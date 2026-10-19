@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ruindows Live Messenger</title>
+<link rel="stylesheet" href="css/msn.css">
+<link rel="stylesheet" href="css/wlm85.css">
+<script src="js/theme.js"></script>
+<style>
+  .wlm-window.buddy { background: #ecf6f9; }
+
+  /* --- coloured header: title, identity, toolbar ------------------------- */
+  .identity {
+    flex: none;
+    height: 112px;
+    background: url('assets/wlm85/header.png') top / 100% 180px no-repeat;
+    color: #fff;
+  }
+  .identity .wlm-titlebar .title-text { color: #fff; text-shadow: 0 1px 2px rgba(0, 40, 70, 0.7); }
+  .me {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px 0 4px;
+  }
+  .me .wlm-dp { width: 80px; height: 80px; }
+  .me .wlm-dp .frame { width: 80px; height: 80px; }
+  .me .wlm-dp .pic { left: 6px; top: 5px; width: 64px; height: 64px; }
+  .me-lines { min-width: 0; flex: 1; }
+  .me-name {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap;
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+  }
+  .me-name b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0, 40, 70, 0.6); }
+  .me-name .st { color: #c4e6f2; }
+  .me-name .wlm-dropdown::after, .psm.wlm-dropdown::after { border-top-color: #fff; }
+  .psm {
+    margin-top: 5px;
+    color: #c4e6f2;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .psm span { overflow: hidden; text-overflow: ellipsis; }
+  .psm, .me .wlm-dp { -webkit-app-region: no-drag; cursor: pointer; }
+  .psm:hover span, .me-name:hover b { text-decoration: underline; }
+  .inline-edit {
+    width: 100%;
+    height: 20px;
+    padding: 0 4px;
+    border: 1px solid #7aa7c7;
+    font-size: 12px;
+    color: #1e1e1e;
+    -webkit-app-region: no-drag;
+  }
+
+  .toolbar {
+    flex: none;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 6px 0 8px;
+    background: url('assets/wlm85/header.png') bottom / 100% 78px no-repeat;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    position: relative;
+    z-index: 1;
+  }
+  .tb {
+    height: 24px;
+    min-width: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0 3px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #fff;
+  }
+  .tb:hover { border-color: rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.18); }
+  .tb img { width: 16px; height: 16px; }
+  .tb .caret { border: 3px solid transparent; border-top: 4px solid #fff; margin-top: 4px; }
+  .toolbar .spacer { flex: 1; }
+
+  /* --- contact pane with tab strip on the left ------------------------------- */
+  .pane { flex: 1; min-height: 0; display: flex; }
+  .tabs {
+    flex: none;
+    width: 34px;
+    padding-top: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: #ecf6f9;
+  }
+  .tabs .tab {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 3px;
+  }
+  .tabs .tab.active { background: #fff; border-color: #bed6e0; border-right-color: #fff; border-radius: 3px 0 0 3px; margin-right: -2px; width: 32px; }
+  .tabs .tab img { width: 22px; height: 19px; }
+
+  .contacts {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #bed6e0;
+    border-right: none;
+  }
+  .search-row {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 6px 6px 6px;
+    border-bottom: 1px solid #e3e8ec;
+  }
+  .search {
+    flex: 1;
+    min-width: 0;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    border: 1px solid #c4cdd6;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+    background: #fff;
+  }
+  .search input[type='text'] {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    font-family: var(--wlm-font);
+    font-size: 12px;
+    padding: 0 5px;
+    color: #1e1e1e;
+  }
+  .search input::placeholder { color: #8d8d8d; font-style: italic; }
+  .search svg { flex: none; margin-right: 5px; }
+  .icon-btn { display: flex; padding: 2px; border: 1px solid transparent; border-radius: 2px; }
+  .icon-btn:hover { border-color: #a9cfe8; background: #eaf5fc; }
+
+  .contact-list { flex: 1; overflow-y: auto; padding: 3px 0 6px; }
+
+  /* Vista progress bar while WhatsApp syncs */
+  .sync { flex: none; padding: 5px 8px 6px; border-bottom: 1px solid #e3e8ec; color: #4a4a4a; }
+  .sync-bar {
+    position: relative;
+    height: 14px;
+    margin-top: 4px;
+    border: 1px solid #b2b2b2;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #f3f3f3, #e2e2e2 50%, #d9d9d9 50%, #ececec);
+    overflow: hidden;
+  }
+  .sync-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    background: linear-gradient(180deg, #a6eaa9 0%, #45c34e 45%, #06b025 50%, #3fd34b 100%);
+    transition: width 0.4s;
+  }
+  /* transform-only and slow: animating "left" repainted the window every frame */
+  .sync-bar.indeterminate .sync-fill { width: 30%; left: 0; will-change: transform; animation: sync-slide 2s steps(24) infinite; }
+  @keyframes sync-slide { from { transform: translateX(-100%); } to { transform: translateX(334%); } }
+  #sync[hidden] .sync-fill { animation: none; }
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px 2px;
+    font-weight: 600;
+    color: #1e1e1e;
+  }
+  .group-header img { width: 9px; height: 9px; }
+  .group-header .count { font-weight: 400; color: #5a5a5a; }
+  .contact-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 4px 0 14px;
+    padding: 1px 4px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .contact-row:hover { background: linear-gradient(180deg, #fafdfe, #e8f5fd); border-color: #b8e2fb; }
+  .contact-row.selected { background: linear-gradient(180deg, #f1f8fd, #d5effc); border-color: #84acdd; }
+  .contact-row img { flex: none; width: 16px; height: 16px; }
+  .contact-row .cname { overflow: hidden; text-overflow: ellipsis; color: #1e1e1e; }
+  .contact-row .status-suffix { color: #6d6d6d; }
+  .contact-row .unread { color: #d35400; font-weight: 600; }
+  .contact-row .personal-message { color: #8d8d8d; font-style: normal; }
+  .fav-star.head { width: 13px; height: 13px; margin: 0 -1px 0 0; flex: none; }
+  .contact-row .personal-message .emo { width: 16px; height: 16px; vertical-align: -3px; }
+  .empty-note { padding: 2px 6px 2px 20px; color: #8d8d8d; }
+
+  /* --- bottom: banner + web search ------------------------------------------- */
+  .bottom { flex: none; padding: 8px 8px 7px; }
+  .banner { display: flex; justify-content: center; margin-bottom: 7px; }
+  .banner img { width: 234px; height: 60px; border: 1px solid #bed6e0; }
+  .websearch {
+    display: flex;
+    height: 23px;
+    border: 1px solid #a4b4c6;
+    background: #fff;
+  }
+  .websearch input[type='text'] { flex: 1; min-width: 0; border: none; padding: 0 5px; font-family: var(--wlm-font); }
+  .websearch input::placeholder { color: #8d8d8d; }
+  .websearch button {
+    width: 26px;
+    border: none;
+    border-left: 1px solid #a4b4c6;
+    background: linear-gradient(180deg, #f6fbf2, #d7ecc9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs><linearGradient id="favg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3a0"/><stop offset=".55" stop-color="#ffd02a"/><stop offset="1" stop-color="#f0a800"/></linearGradient></defs></svg>
+<div class="wlm-window buddy">
+  <div class="identity" id="identity">
+    <div class="wlm-titlebar">
+      <img class="title-icon" src="assets/wlm85/live-flag.png" alt="" style="width:14px">
+      <div class="title-text">Ruindows Live Messenger</div>
+    </div>
+    <div class="me">
+      <div class="wlm-dp" id="myDpBox" title="Alterar foto de exibição">
+        <img class="pic" id="myDp" src="assets/wlm85/avatar-default.png" alt="">
+        <img class="frame" id="myFrame" src="assets/wlm85/frame-online.png" alt="">
+      </div>
+      <div class="me-lines">
+        <div class="me-name" id="myName"><b id="myNameText">&hellip;</b><span class="st" id="myStatus">(Online)</span><span class="wlm-dropdown"></span></div>
+        <div class="psm" id="psm"><span id="psmText">&lt;Digite uma mensagem pessoal&gt;</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="wlm-caption">
+    <button class="minimize" title="Minimizar"><svg class="glyph" width="10" height="5"><rect x="0.5" y="1.5" width="9" height="3" fill="#fff" stroke="#384c66"/></svg></button>
+    <button class="maximize" title="Maximizar"><svg class="glyph" width="11" height="9"><rect x="0.5" y="0.5" width="10" height="8" fill="none" stroke="#384c66"/><rect x="1.5" y="1.5" width="8" height="6" fill="none" stroke="#fff"/><rect x="2.5" y="3.5" width="6" height="3" fill="#cfdbe8" stroke="#384c66"/></svg></button>
+    <button class="close" title="Fechar"><svg class="glyph" width="12" height="10"><path d="M2 1.5l8 7M10 1.5l-8 7" stroke="#5a1a0c" stroke-width="3.2" stroke-linecap="round"/><path d="M2 1.5l8 7M10 1.5l-8 7" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+
+  <div class="toolbar">
+    <div class="tb" id="mailBtn" title="Abrir sua caixa de entrada"><img src="assets/wlm85/navbar-mail.png" alt=""></div>
+    <div class="tb" id="contactsBtn" title="Localizar um contato"><img src="assets/wlm85/navbar-contacts.png" alt="" style="width:20px;height:20px"></div>
+    <div class="tb" id="newsBtn" title="MSN Hoje"><img src="assets/wlm85/navbar-news.png" alt=""></div>
+    <div class="spacer"></div>
+    <div class="tb" id="themeBtn" title="Modo escuro"></div>
+    <div class="tb" id="colorsBtn" title="Mudar o esquema de cores"><img src="assets/wlm85/navbar-colors.png" alt=""></div>
+    <div class="tb" id="menuBtn" title="Mostrar menu"><svg width="14" height="12"><rect x="0.5" y="0.5" width="13" height="11" fill="#e8f1f6" stroke="#fff"/><path d="M3 3.5h8M3 6h8M3 8.5h8" stroke="#2d6d8f"/></svg><span class="caret"></span></div>
+  </div>
+
+
+  <div class="pane">
+    <div class="tabs">
+      <div class="tab active" title="Contatos"><img src="assets/wlm85/tab-contacts.png" alt=""></div>
+    </div>
+    <div class="contacts">
+      <div class="search-row">
+        <div class="search">
+          <input type="text" id="findInput" placeholder="Localizar um contato..." spellcheck="false">
+          <svg width="12" height="12"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#6b7c8f" stroke-width="1.4"/><path d="M8 8l3 3" stroke="#6b7c8f" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div class="icon-btn" id="addBtn" title="Adicionar um contato ou uma IA"><img src="assets/wlm85/add-contact.png" width="16" height="15" alt=""></div>
+        <div class="icon-btn" id="sortBtn" title="Organizar contatos"><img src="assets/wlm85/sort-contacts.png" width="16" height="16" alt=""></div>
+      </div>
+      <div class="sync" id="sync" hidden>
+        <span id="syncLabel"></span> <span id="syncPct"></span>
+        <div class="sync-bar" id="syncBar"><div class="sync-fill" id="syncFill"></div></div>
+      </div>
+      <div class="contact-list" id="contactList"></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="banner"><img src="assets/wlm85/ad.png" alt="Ruindows Live Messenger"></div>
+    <form class="websearch" id="webSearch">
+      <input type="text" id="webQuery" placeholder="Pesquisar na Web..." spellcheck="false">
+      <button type="submit" title="Pesquisar"><svg width="12" height="12"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#3d7a2a" stroke-width="1.5"/><path d="M8 8l3 3" stroke="#3d7a2a" stroke-width="2" stroke-linecap="round"/></svg></button>
+    </form>
+  </div>
+</div>
+
+<script src="js/chrome.js"></script>
+<script src="js/menus.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/activity.js"></script>
+<script src="js/emoticons.js"></script>
+<script>
+  const listEl = document.getElementById('contactList');
+  const myNameEl = document.getElementById('myName');
+  const myStatusEl = document.getElementById('myStatus');
+  const findInput = document.getElementById('findInput');
+  const presenceByJid = new Map();
+  let lastRoster = null;
+  let selectedJid = null;
+
+  const storage = {
+    get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} },
+  };
+  // archived chats start folded away, like WhatsApp
+  const collapsed = new Set(storage.get('collapsedGroups', ['archived']));
+  let sortByName = storage.get('sortAlpha', true); // alphabetical by default
+
+  // ---- colour schemes and custom header image (the paintbrush) -------------
+  const SCHEMES = [['', 'Azul'], ['-green', 'Verde'], ['-pink', 'Rosa'], ['-yellow', 'Amarelo']];
+  let scheme = storage.get('colorScheme', 0);
+  function applyScheme() {
+    const identity = document.getElementById('identity');
+    const toolbar = document.querySelector('.toolbar');
+    const custom = Profile.get().header;
+    if (custom) {
+      // darken it a little so the white name and icons stay readable
+      identity.style.background = `linear-gradient(rgba(0, 30, 60, 0.15), rgba(0, 30, 60, 0.35)), url('${custom}') center top / cover no-repeat`;
+      toolbar.style.background = `linear-gradient(rgba(0, 30, 60, 0.55), rgba(0, 30, 60, 0.65)), url('${custom}') center bottom / cover no-repeat`;
+    } else {
+      identity.style.background = '';
+      toolbar.style.background = '';
+      const url = `url('assets/wlm85/header${SCHEMES[scheme][0]}.png')`;
+      identity.style.backgroundImage = url;
+      toolbar.style.backgroundImage = url;
+    }
+  }
+  applyScheme();
+  document.getElementById('colorsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const custom = !!Profile.get().header;
+    Menus.popup([
+      ...SCHEMES.map(([, label], i) => ({
+        label: (!custom && i === scheme ? '✓ ' : '') + label,
+        action: () => { scheme = i; storage.set('colorScheme', i); Profile.set({ header: null }); },
+      })),
+      { sep: true },
+      { label: (custom ? '✓ ' : '') + 'Escolher uma imagem...', action: async () => {
+        const img = await Profile.pickImage(660, 284);
+        if (img) Profile.set({ header: img });
+      } },
+    ], r.right - 190, r.bottom + 2);
+  });
+
+  function statusOf(chat) {
+    return Activity.statusOf({
+      presence: presenceByJid.get(chat.jid) || chat.presence,
+      lastIncoming: chat.lastIncoming,
+      about: chat.about,
+      lastOutgoing: chat.lastOutgoing,
+      directIncoming: chat.directIncoming,
+    });
+  }
+  // statuses decay with time, so redraw every minute
+  setInterval(() => lastRoster && render(lastRoster), 60 * 1000);
+
+  function icon(status) {
+    return {
+      online: 'assets/wlm85/status16-online.png',
+      away: 'assets/wlm85/status16-away.png',
+      busy: 'assets/wlm85/status16-busy.png',
+      offline: 'assets/wlm85/status16-invisible.png',
+    }[status];
+  }
+
+  // gold star in front of the Favoritos header
+  const STAR_SVG = '<svg class="fav-star" viewBox="0 0 12 12" width="11" height="11"><path d="M6 .6l1.6 3.4 3.7.4-2.8 2.5.8 3.7L6 8.7 2.7 10.6l.8-3.7L.7 4.4l3.7-.4z" fill="url(#favg)" stroke="#c98a00" stroke-width=".7"/></svg>';
+
+  function row(chat) {
+    if (chat.isMe) return myRow(chat);
+    const div = document.createElement('div');
+    div.className = 'contact-row' + (chat.jid === selectedJid ? ' selected' : '');
+    if (!chat.isGroup) div.title = '+' + chat.jid.replace(/@.*/, '');
+    const status = statusOf(chat);
+    const suffix =
+      status === 'online' || chat.isGroup
+        ? ''
+        : status === 'away'
+          ? ' <span class="status-suffix">(Ausente)</span>'
+          : status === 'busy'
+          ? ' <span class="status-suffix">(Ocupado)</span>'
+          : ' <span class="status-suffix">(Offline)</span>';
+    const unread = chat.unread > 0 ? ` <span class="unread">(${chat.unread})</span>` : '';
+    // personal message = their WhatsApp "about" text, never the last message
+    const psm = chat.about
+      ? ` <span class="personal-message">- ${messageHtml(truncate(chat.about, 48))}</span>`
+      : '';
+    const img = chat.isGroup ? 'assets/wlm85/messenger-icon.png' : icon(status);
+    div.innerHTML = `<img src="${img}"><span class="cname">${escapeHtml(chat.name)}${suffix}${unread}${psm}</span>`;
+    div.addEventListener('dblclick', () => window.msn.openChat(chat.jid));
+    div.addEventListener('click', () => selectRow(div, chat.jid));
+    div.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      selectRow(div, chat.jid);
+      Menus.popup(
+        [
+          { label: 'Enviar uma mensagem instantânea', action: () => window.msn.openChat(chat.jid) },
+          { label: 'Chamar a atenção', action: () => window.msn.nudge(chat.jid) },
+          { sep: true },
+          { label: 'Exibir perfil', action: () => showProfile(chat) },
+          { sep: true },
+          { label: 'Bloquear', disabled: true },
+          { label: 'Excluir contato', disabled: true },
+        ],
+        e.clientX,
+        e.clientY
+      );
+    });
+    return div;
+  }
+
+  // me, at the top of the list, to message myself like WhatsApp's "Você"
+  const MY_ICON = { online: 'status16-online', busy: 'status16-busy', away: 'status16-away', offline: 'status16-invisible' };
+  function myRow(chat) {
+    const div = document.createElement('div');
+    div.className = 'contact-row' + (chat.jid === selectedJid ? ' selected' : '');
+    const p = Profile.get();
+    const psm = p.psm ? ` <span class="personal-message">- ${escapeHtml(truncate(p.psm, 40))}</span>` : '';
+    const unread = chat.unread > 0 ? ` <span class="unread">(${chat.unread})</span>` : '';
+    div.innerHTML = `<img src="assets/wlm85/${MY_ICON[myStatus] || MY_ICON.online}.png">` +
+      `<span class="cname">${escapeHtml(p.nick || waName)} <span class="status-suffix">(você)</span>${unread}${psm}</span>`;
+    div.title = 'Mensagens para você mesmo';
+    div.addEventListener('dblclick', () => window.msn.openChat(chat.jid));
+    div.addEventListener('click', () => selectRow(div, chat.jid));
+    return div;
+  }
+
+  function selectRow(div, jid) {
+    selectedJid = jid;
+    document.querySelectorAll('.contact-row.selected').forEach((r) => r.classList.remove('selected'));
+    div.classList.add('selected');
+  }
+
+  function statusLabel(chat) {
+    return { online: 'Online', busy: 'Ocupado', away: 'Ausente', offline: 'Offline' }[statusOf(chat)];
+  }
+
+  function showProfile(chat) {
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <div class="xp-dialog">
+        <div class="xp-dialog-title">${escapeHtml(chat.name)}</div>
+        <div class="xp-dialog-body">
+          <div class="wlm-dp small"><img class="pic" id="profDp" src="assets/wlm85/avatar-default.png"><img class="frame" src="assets/wlm85/frame_64.png"></div>
+          <div>
+            <b>${escapeHtml(chat.name)}</b><br>
+            +${escapeHtml(chat.jid.replace(/@.*/, ''))}<br>
+            Status: ${statusLabel(chat)}
+          </div>
+        </div>
+        <div class="xp-dialog-buttons"><button class="wlm-button">Fechar</button></div>
+      </div>`;
+    overlay.querySelector('button').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    window.msn.avatar(chat.jid).then((url) => {
+      const img = overlay.querySelector('#profDp');
+      if (url && img) img.src = url;
+    });
+  }
+
+  function groupHeader(key, label, count) {
+    const div = document.createElement('div');
+    div.className = 'group-header';
+    const arrow = collapsed.has(key) ? 'arrow-left' : 'arrow-down';
+    const star = key === 'pinned' ? STAR_SVG.replace('fav-star', 'fav-star head') : '';
+    div.innerHTML = `<img src="assets/wlm85/${arrow}.png" alt="">${star}${label} <span class="count">(${count})</span>`;
+    div.addEventListener('click', () => {
+      collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
+      storage.set('collapsedGroups', [...collapsed]);
+      if (lastRoster) render(lastRoster);
+    });
+    return div;
+  }
+
+  // Redrawing ~900 rows on every WhatsApp event (each "typing" in any group)
+  // kept the CPU busy and made the whole desktop, mouse included, sluggish.
+  // Coalesce into at most a few redraws per second, and none while minimized.
+  let renderTimer = null;
+  let lastRenderAt = 0;
+  function render(roster) {
+    lastRoster = roster;
+    if (renderTimer) return;
+    const wait = Math.max(0, 700 - (Date.now() - lastRenderAt));
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      if (document.hidden) { pendingWhileHidden = true; return; }
+      lastRenderAt = Date.now();
+      renderNow(lastRoster);
+    }, wait);
+  }
+  let pendingWhileHidden = false;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && pendingWhileHidden && lastRoster) { pendingWhileHidden = false; render(lastRoster); }
+  });
+  const byName = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true });
+
+  function renderNow(roster) {
+    if (roster.me && roster.me.name !== waName) {
+      waName = roster.me.name;
+      applyProfile();
+    }
+    if (roster.me) loadMyDp(roster.me.jid);
+    const q = findInput.value.trim().toLowerCase();
+    let chats = roster.chats.filter((c) => !q || c.name.toLowerCase().includes(q));
+    if (sortByName) chats = [...chats].sort((a, b) => byName.compare(a.name, b.name));
+    const archived = chats.filter((c) => c.archived && !c.isMe);
+    // chats pinned on WhatsApp live only in Favoritos, at the top
+    const pinned = chats.filter((c) => c.pinned && !c.archived);
+    const me = chats.find((c) => c.isMe && !c.pinned);
+    chats = chats.filter((c) => !c.archived && !c.isMe && !c.pinned);
+    const sections = [
+      ['pinned', 'Favoritos', pinned],
+      ['online', 'Online', [...(me ? [me] : []), ...chats.filter((c) => !c.isGroup && statusOf(c) !== 'offline')]],
+      ['groups', 'Grupos', chats.filter((c) => c.isGroup)],
+      ['offline', 'Offline', chats.filter((c) => !c.isGroup && statusOf(c) === 'offline')],
+      ['archived', 'Arquivadas', archived],
+    ];
+    listEl.replaceChildren();
+    for (const [key, label, list] of sections) {
+      if (key === 'archived') renderAi(q);
+      if ((key === 'groups' || key === 'archived' || key === 'pinned') && !list.length) continue;
+      listEl.appendChild(groupHeader(key, label, list.length));
+      if (!collapsed.has(key)) list.forEach((c) => listEl.appendChild(row(c)));
+    }
+    if (q && !chats.length && !archived.length && !pinned.length) {
+      listEl.appendChild(Object.assign(document.createElement('div'), {
+        className: 'empty-note',
+        textContent: 'Nenhum contato encontrado.',
+      }));
+    }
+  }
+
+  // ---- AI chat sites: one section per provider ------------------------------------
+  let aiRoster = [];
+  window.msn.aiRoster?.().then((r) => { aiRoster = r || []; if (lastRoster) render(lastRoster); });
+  window.msn.onAiRoster?.((r) => { aiRoster = r || []; if (lastRoster) render(lastRoster); });
+
+  function aiRow(text, { icon = 'assets/wlm85/messenger-icon.png', title, dim, onOpen, jid, sub } = {}) {
+    const div = document.createElement('div');
+    div.className = 'contact-row ai-row' + (jid && jid === selectedJid ? ' selected' : '');
+    div.innerHTML = `<img src="${icon}"><span class="cname${dim ? ' status-suffix' : ''}">${escapeHtml(text)}` +
+      `${sub ? ` <span class="personal-message">- ${escapeHtml(sub)}</span>` : ''}</span>`;
+    if (title) div.title = title;
+    div.addEventListener('dblclick', onOpen);
+    div.addEventListener('click', () => (jid ? selectRow(div, jid) : null));
+    return div;
+  }
+
+  // ---- AI group chats: several AIs in one window ----------------------------
+  let aiGroups = [];
+  window.msn.aiGroups?.().then((g) => { aiGroups = g || []; if (lastRoster) render(lastRoster); });
+  window.msn.onAiGroups?.((g) => { aiGroups = g || []; if (lastRoster) render(lastRoster); });
+  const aiName = (id) => ({ chatgpt: 'ChatGPT', deepseek: 'DeepSeek', gemini: 'Gemini', claude: 'Claude' }[id] || id);
+
+  function renderAiGroups(q) {
+    const groups = aiGroups.filter((g) => !q || g.name.toLowerCase().includes(q));
+    if (q && !groups.length) return;
+    listEl.appendChild(groupHeader('ai-groups', 'Grupos de IAs', groups.length));
+    if (collapsed.has('ai-groups')) return;
+    for (const g of groups) {
+      const row = aiRow(g.name, {
+        icon: 'assets/wlm85/messenger-icon.png',
+        jid: g.jid,
+        sub: (g.busy ? 'conversando... ' : '') + g.members.map(aiName).join(', '),
+        title: g.mode === 'chain' ? 'Respondem em sequência' : 'Respondem todas juntas',
+        onOpen: () => window.msn.openChat(g.jid),
+      });
+      row.addEventListener('contextmenu', (e) => aiGroupMenu(g, e));
+      listEl.appendChild(row);
+    }
+    if (!q) listEl.appendChild(aiRow('Novo grupo de IAs...', { dim: true, onOpen: () => aiGroupDialog() }));
+  }
+
+  function aiGroupMenu(g, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    Menus.popup([
+      { label: 'Abrir conversa', action: () => window.msn.openChat(g.jid) },
+      { label: 'Editar grupo...', action: () => aiGroupDialog(g) },
+      { sep: true },
+      { label: 'Excluir grupo', action: () => window.msn.aiGroupDelete(g.jid) },
+    ], e.clientX, e.clientY);
+  }
+
+  // members are a multiple choice, so here checkboxes fit
+  async function aiGroupDialog(g = null) {
+    const providers = await window.msn.aiProviders();
+    const order = ['chatgpt', 'deepseek', 'gemini', 'claude'];
+    providers.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    const members = new Set(g ? g.members : order);
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <form class="xp-dialog" style="width:320px">
+        <div class="xp-dialog-title">${g ? 'Editar grupo de IAs' : 'Novo grupo de IAs'}</div>
+        <div class="xp-dialog-body" style="flex-direction:column;gap:6px;align-items:stretch">
+          <label>Nome: <input type="text" name="name" value="${escapeHtml(g?.name || 'Grupo de IAs')}" style="width:200px"></label>
+          <div>Quem participa:</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-left:8px">
+            ${providers.map((p) => `<label><input type="checkbox" name="m" value="${p.id}"${members.has(p.id) ? ' checked' : ''}> ${escapeHtml(p.name)}</label>`).join('')}
+          </div>
+          <div>Como respondem:</div>
+          <label style="margin-left:8px"><input type="radio" name="mode" value="round"${g?.mode !== 'chain' ? ' checked' : ''}> <b>Todas juntas</b><br>
+            <span style="color:#6d6d6d;margin-left:20px">Cada uma vê o que as outras disseram na sua próxima mensagem.</span></label>
+          <label style="margin-left:8px"><input type="radio" name="mode" value="chain"${g?.mode === 'chain' ? ' checked' : ''}> <b>Em sequência</b><br>
+            <span style="color:#6d6d6d;margin-left:20px">Uma de cada vez; cada uma já lê e pode responder as anteriores.</span></label>
+        </div>
+        <div class="xp-dialog-buttons">
+          <button class="wlm-button" type="submit">OK</button>
+          <button class="wlm-button" type="button" data-cancel>Cancelar</button>
+        </div>
+      </form>`;
+    const form = overlay.querySelector('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const picked = [...form.querySelectorAll('input[name=m]:checked')].map((i) => i.value);
+      if (!picked.length) return;
+      const opts = { name: form.name.value.trim() || 'Grupo de IAs', members: picked, mode: form.mode.value };
+      overlay.remove();
+      if (g) window.msn.aiGroupUpdate(g.jid, opts);
+      else window.msn.openChat(await window.msn.aiGroupCreate(opts));
+    });
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
+  function renderAi(q) {
+    renderAiGroups(q);
+    const match = (t) => !q || t.toLowerCase().includes(q);
+    for (const prov of aiRoster) {
+      const key = `ai-${prov.id}`;
+      const convs = prov.conversations.filter((c) => match(c.title) || match(prov.name));
+      // Claude Code sessions on this PC, shown under Claude
+      const code = (prov.codeSessions || []).filter((c) => match(c.title) || match(prov.name) || match('claude code'));
+      if (q && !convs.length && !code.length && !match(prov.name)) continue;
+      const header = groupHeader(key, prov.name, convs.length + code.length);
+      header.title = 'Clique com o botão direito para mais opções';
+      header.addEventListener('contextmenu', (e) => aiHeaderMenu(prov, e));
+      listEl.appendChild(header);
+      if (collapsed.has(key)) continue;
+      if (!prov.checked) {
+        listEl.appendChild(aiRow('Conectando...', { icon: 'assets/wlm85/status16-away.png', dim: true, onOpen: () => window.msn.aiLogin(prov.id) }));
+      } else if (!prov.loggedIn) {
+        listEl.appendChild(aiRow(`Entrar no ${prov.name}...`, { icon: 'assets/wlm85/status16-invisible.png', title: 'Abre o site para você entrar com a sua conta', onOpen: () => window.msn.aiLogin(prov.id) }));
+      } else {
+        listEl.appendChild(aiRow('Nova conversa', {
+          icon: 'assets/wlm85/status16-online.png',
+          onOpen: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}`),
+        }));
+        for (const c of convs) {
+          listEl.appendChild(aiRow(c.title, { jid: c.jid, onOpen: () => window.msn.openChat(c.jid) }));
+        }
+      }
+      for (const c of code) {
+        listEl.appendChild(aiRow(c.title, {
+          jid: c.jid,
+          icon: 'assets/wlm85/status16-online.png',
+          sub: 'Claude Code',
+          title: 'Sessão do Claude Code neste PC',
+          onOpen: () => window.msn.openChat(c.jid),
+        }));
+      }
+    }
+  }
+
+  // where downloaded photos/videos/stickers live and when they're cleaned up
+  async function mediaOptions() {
+    const o = await window.msn.getMediaOptions();
+    const mb = (b) => (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <form class="xp-dialog" style="width:330px">
+        <div class="xp-dialog-title">Opções de mídia</div>
+        <div class="xp-dialog-body" style="flex-direction:column;gap:7px;align-items:stretch">
+          <label><input type="radio" name="mode" value="persist"${o.mode !== 'temp' ? ' checked' : ''}> <b>Guardar no disco</b><br>
+            <span style="color:#6d6d6d;margin-left:20px">Fotos e vídeos ficam no PC e não baixam de novo.</span></label>
+          <div style="margin-left:20px">Apagar o que não for aberto em
+            <input type="number" name="keepValue" min="1" value="${o.keepValue}" style="width:48px">
+            <select name="keepUnit"><option value="hours"${o.keepUnit === 'hours' ? ' selected' : ''}>horas</option><option value="days"${o.keepUnit !== 'hours' ? ' selected' : ''}>dias</option></select><br>
+            Usar no máximo <input type="number" name="maxMB" min="50" value="${o.maxMB}" style="width:64px"> MB</div>
+          <label><input type="radio" name="mode" value="temp"${o.mode === 'temp' ? ' checked' : ''}> <b>Temporário</b><br>
+            <span style="color:#6d6d6d;margin-left:20px">Apaga tudo ao fechar o app. Bom pra HD cheio.</span></label>
+          <label><input type="checkbox" name="autoDownload"${o.autoDownload ? ' checked' : ''}> Baixar fotos automaticamente<br>
+            <span style="color:#6d6d6d;margin-left:20px">Desmarcado: só baixa quando você clicar. Bom pra dados móveis.</span></label>
+          <div style="color:#6d6d6d">Em uso agora: ${o.usage.files} arquivos, ${mb(o.usage.bytes)}
+            <span class="dl-clear" style="color:var(--wlm-link);cursor:pointer;text-decoration:underline;margin-left:6px">Limpar agora</span></div>
+        </div>
+        <div class="xp-dialog-buttons">
+          <button class="wlm-button" type="submit">OK</button>
+          <button class="wlm-button" type="button" data-cancel>Cancelar</button>
+        </div>
+      </form>`;
+    const form = overlay.querySelector('form');
+    overlay.querySelector('.dl-clear').addEventListener('click', async (e) => {
+      const u = await window.msn.clearMedia();
+      if (u) e.target.parentElement.firstChild.textContent = `Em uso agora: ${u.files} arquivos, ${mb(u.bytes)} `;
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await window.msn.setMediaOptions({
+        mode: form.mode.value,
+        keepValue: form.keepValue.value,
+        keepUnit: form.keepUnit.value,
+        maxMB: form.maxMB.value,
+        autoDownload: form.autoDownload.checked,
+      });
+      overlay.remove();
+    });
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
+  // sun/moon toggle in the toolbar: shows what a click switches to
+  const MOON_SVG = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.5 5.5 0 0 1 10.5 1.5z" fill="#f4f1d0" stroke="#5d6f86"/></svg>';
+  const SUN_SVG = '<svg width="16" height="16" viewBox="0 0 16 16"><g stroke="#f2b320" stroke-width="1.4" stroke-linecap="round"><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3"/></g><circle cx="8" cy="8" r="3.2" fill="#ffd54a" stroke="#e09a12"/></svg>';
+  const themeBtn = document.getElementById('themeBtn');
+  function showThemeBtn(theme) {
+    const dark = theme === 'dark';
+    themeBtn.innerHTML = dark ? SUN_SVG : MOON_SVG;
+    themeBtn.title = dark ? 'Modo claro' : 'Modo escuro';
+  }
+  showThemeBtn(document.documentElement.dataset.theme);
+  window.msn.onTheme?.(showThemeBtn);
+  themeBtn.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    window.msn.setTheme(dark ? 'light' : 'dark');
+  });
+
+  // light, dark, or whatever the OS is using
+  async function themeMenu() {
+    const choice = await window.msn.themeChoice();
+    const btn = document.getElementById('menuBtn');
+    const r = btn.getBoundingClientRect();
+    const opt = (key, label) => ({ label: (choice === key ? '✓ ' : '') + label, action: () => window.msn.setTheme(key) });
+    Menus.popup([opt('light', 'Claro'), opt('dark', 'Escuro'), opt('system', 'Igual ao sistema')], r.right - 150, r.bottom + 2);
+  }
+
+  // every AI has a section; right-click hides one, and the add-contact menu
+  // brings it back
+  async function setAiEnabled(ids) {
+    aiRoster = await window.msn.aiSetEnabled(ids);
+    if (lastRoster) render(lastRoster);
+    window.msn.aiRefresh();
+  }
+  function aiHeaderMenu(prov, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    Menus.popup([
+      { label: 'Nova conversa', action: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}`), disabled: !prov.loggedIn },
+      { label: 'Atualizar conversas', action: () => window.msn.aiRefresh() },
+      { label: prov.loggedIn ? 'Entrar com outra conta...' : `Entrar no ${prov.name}...`, action: () => window.msn.aiLogin(prov.id) },
+      { sep: true },
+      { label: `Esconder ${prov.name} da lista`, action: () => setAiEnabled(aiRoster.map((p) => p.id).filter((id) => id !== prov.id)) },
+    ], e.clientX, e.clientY);
+  }
+
+  let myDpLoaded = false;
+  let waDp = null;
+  async function loadMyDp(jid) {
+    if (myDpLoaded || !jid) return;
+    myDpLoaded = true;
+    waDp = await window.msn.avatar(jid);
+    applyProfile();
+  }
+
+  // ---- my profile: nick, personal message, picture (cosmetic only) --------
+  let waName = '…';
+  function applyProfile() {
+    const p = Profile.get();
+    document.getElementById('myNameText').textContent = p.nick || waName;
+    document.getElementById('psmText').textContent = p.psm || '<Digite uma mensagem pessoal>';
+    document.getElementById('myDp').src = p.dp || waDp || 'assets/wlm85/avatar-default.png';
+    applyScheme();
+  }
+  Profile.onChange(() => { applyProfile(); if (lastRoster) render(lastRoster); });
+
+  function editInline(container, current, placeholder, save) {
+    const input = Object.assign(document.createElement('input'), {
+      type: 'text', className: 'inline-edit', value: current, placeholder,
+    });
+    const restore = container.innerHTML;
+    container.replaceChildren(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      container.innerHTML = restore;
+      if (commit) save(input.value.trim());
+      applyProfile();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  function editNick() {
+    editInline(document.getElementById('myName'), Profile.get().nick || waName, waName,
+      (v) => Profile.set({ nick: v === waName ? null : v }));
+  }
+  function editPsm() {
+    editInline(document.getElementById('psm'), Profile.get().psm || '', 'Digite uma mensagem pessoal',
+      (v) => Profile.set({ psm: v }));
+  }
+  async function changeDp() {
+    const img = await Profile.pickImage(96, 96);
+    if (img) Profile.set({ dp: img });
+  }
+  document.getElementById('psm').addEventListener('click', editPsm);
+  document.getElementById('myDpBox').addEventListener('click', changeDp);
+
+  function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // ---- my status (cosmetic; "Ocupado" silences toasts and sounds) ----------
+  const MY_STATUS = {
+    online: ['Online', 'frame-online'],
+    busy: ['Ocupado', 'frame-busy'],
+    away: ['Ausente', 'frame-away'],
+    offline: ['Aparecer offline', 'frame-offline'],
+  };
+  let myStatus = 'online';
+  function showMyStatus(s) {
+    if (!MY_STATUS[s]) return;
+    myStatus = s;
+    if (lastRoster) render(lastRoster);
+    myStatusEl.textContent = `(${MY_STATUS[s][0]})`;
+    document.getElementById('myFrame').src = `assets/wlm85/${MY_STATUS[s][1]}.png`;
+  }
+  function setMyStatus(s) {
+    showMyStatus(s);
+    window.msn.setStatus(s);
+  }
+  window.msn.getStatus().then(showMyStatus);
+  window.msn.onStatus(showMyStatus);
+
+  myNameEl.addEventListener('click', (e) => {
+    if (e.target.closest('.inline-edit')) return;
+    e.stopPropagation();
+    const r = myNameEl.getBoundingClientRect();
+    Menus.popup([
+      ...Object.entries(MY_STATUS).map(([s, [label]]) => ({
+        label: (s === myStatus ? '✓ ' : '') + label,
+        action: () => setMyStatus(s),
+      })),
+      { sep: true },
+      { label: 'Alterar nome de exibição...', action: editNick },
+      { label: 'Opções de status dos contatos...', action: () => Activity.showOptions(() => lastRoster && render(lastRoster)) },
+      { label: 'Alterar mensagem pessoal...', action: editPsm },
+      { label: 'Alterar foto de exibição...', action: changeDp },
+      ...(Profile.get().dp ? [{ label: 'Usar a foto do WhatsApp', action: () => Profile.set({ dp: null }) }] : []),
+      { sep: true },
+      { label: 'Sair', action: () => window.msn.signOut() },
+    ], r.left, r.bottom + 2);
+  });
+
+  // ---- toolbar ---------------------------------------------------------------
+  document.getElementById('mailBtn').addEventListener('click', () =>
+    window.msn.openExternal('https://outlook.live.com/mail/'));
+  document.getElementById('newsBtn').addEventListener('click', () =>
+    window.msn.openExternal('https://www.msn.com/pt-br'));
+  document.getElementById('contactsBtn').addEventListener('click', () => findInput.focus());
+
+  // 8.5 hid the classic menu bar behind this button
+  document.getElementById('menuBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    Menus.popup([
+      { label: 'Enviar uma mensagem instantânea', action: () => selectedJid && window.msn.openChat(selectedJid) },
+      { label: 'Chamar a atenção', action: () => selectedJid && window.msn.nudge(selectedJid) },
+      { sep: true },
+      ...Object.entries(MY_STATUS).map(([st, [label]]) => ({
+        label: (st === myStatus ? '✓ ' : '') + 'Meu status: ' + label,
+        action: () => setMyStatus(st),
+      })),
+      { label: 'Alterar nome de exibição...', action: editNick },
+      { sep: true },
+      { label: 'Opções de mídia...', action: mediaOptions },
+      { label: 'Tema...', action: themeMenu },
+      { label: 'Atualizar conversas das IAs', action: () => window.msn.aiRefresh() },
+      { sep: true },
+      {
+        label: (quietArchived ? '✓ ' : '') + 'Grupos arquivados não abrem janela',
+        action: () => { quietArchived = !quietArchived; window.msn.setOption('quietArchivedGroups', quietArchived); },
+      },
+      { sep: true },
+      { label: 'Sobre o Ruindows Live Messenger', action: () => Menus.showAbout() },
+      { sep: true },
+      { label: 'Sair', action: () => window.msn.signOut() },
+      { label: 'Fechar', action: () => window.msn.close() },
+    ], r.right - 200, r.bottom + 2);
+  });
+
+  // archived groups stay quiet (no window/toast); off by default
+  let quietArchived = false;
+  window.msn.getOption?.('quietArchivedGroups').then((v) => { quietArchived = !!v; });
+
+  // ---- search, sort, add ---------------------------------------------------------
+  findInput.addEventListener('input', () => lastRoster && render(lastRoster));
+  findInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { findInput.value = ''; lastRoster && render(lastRoster); }
+    if (e.key === 'Enter') listEl.querySelector('.contact-row')?.dispatchEvent(new MouseEvent('dblclick'));
+  });
+  document.getElementById('sortBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const pick = (byName) => { sortByName = byName; storage.set('sortAlpha', byName); lastRoster && render(lastRoster); };
+    Menus.popup([
+      { label: (sortByName ? '' : '✓ ') + 'Conversa mais recente', action: () => pick(false) },
+      { label: (sortByName ? '✓ ' : '') + 'Nome', action: () => pick(true) },
+    ], r.right - 170, r.bottom + 2);
+  });
+  // one "add" button for everything: a WhatsApp number or an AI
+  document.getElementById('addBtn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const providers = await window.msn.aiProviders();
+    const on = new Set(aiRoster.map((p) => p.id));
+    const ais = providers.filter((p) => !on.has(p.id));
+    Menus.popup([
+      { label: 'Adicionar contato do WhatsApp...', action: addPhoneContact },
+      ...(ais.length ? [{ sep: true }] : []),
+      ...ais.map((p) => ({ label: `Mostrar ${p.name} na lista`, action: () => setAiEnabled([...on, p.id]) })),
+    ], r.left, r.bottom + 2);
+  });
+  function addPhoneContact() {
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <form class="xp-dialog">
+        <div class="xp-dialog-title">Adicionar um contato</div>
+        <div class="xp-dialog-body" style="flex-direction:column;gap:6px">
+          Número do celular com DDI e DDD:
+          <input type="text" name="num" placeholder="5511999999999" style="width:200px;height:22px;padding:0 4px">
+        </div>
+        <div class="xp-dialog-buttons">
+          <button class="wlm-button" type="submit">Conversar</button>
+          <button class="wlm-button" type="button" data-cancel>Cancelar</button>
+        </div>
+      </form>`;
+    const form = overlay.querySelector('form');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const num = form.num.value.replace(/\D/g, '');
+      if (num.length < 10) return;
+      overlay.remove();
+      window.msn.openChat(`${num}@s.whatsapp.net`);
+    });
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    form.num.focus();
+  }
+
+  document.getElementById('webSearch').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = document.getElementById('webQuery').value.trim();
+    if (q) window.msn.openExternal('https://www.bing.com/search?q=' + encodeURIComponent(q));
+  });
+
+  // ---- live events -------------------------------------------------------------
+  window.msn.onRoster(render);
+  window.msn.onPresence(({ jid: chatJid, presence, participant }) => {
+    // typing inside a group says something about that person, not the group
+    const jid = participant || chatJid;
+    const wasOnline = presenceByJid.get(jid) === 'available';
+    presenceByJid.set(jid, presence);
+    if (!wasOnline && presence === 'available') { try { Sounds.online(); } catch {} }
+    const wasShownOnline = wasOnline || presenceByJid.get(jid + '#shown');
+    const nowOnline = presence === 'available' || presence === 'composing' || presence === 'recording';
+    presenceByJid.set(jid + '#shown', nowOnline);
+    if (lastRoster && !!wasShownOnline !== nowOnline) render(lastRoster);
+  });
+  window.msn.onMessage((msg) => { if (!msg.fromMe) { try { Sounds.message(); } catch {} } });
+
+  function showSync(state) {
+    document.getElementById('sync').hidden = !state;
+    if (!state) return;
+    const known = typeof state.progress === 'number';
+    document.getElementById('syncLabel').textContent = state.label;
+    document.getElementById('syncPct').textContent = known ? `${Math.round(state.progress)}%` : '';
+    document.getElementById('syncBar').classList.toggle('indeterminate', !known);
+    document.getElementById('syncFill').style.width = known ? `${state.progress}%` : '';
+  }
+  window.msn.onSync(showSync);
+  window.msn.getSync().then(showSync);
+
+  window.msn.getRoster().then(render);
+</script>
+</body>
+</html>

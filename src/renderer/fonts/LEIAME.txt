@@ -1,0 +1,2 @@
+Selawik (Microsoft), fonte aberta substituta da Segoe UI.
+Licença: SIL Open Font License 1.1 - https://github.com/microsoft/Selawik

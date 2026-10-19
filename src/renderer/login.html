@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ruindows Live Messenger</title>
+<link rel="stylesheet" href="css/msn.css">
+<link rel="stylesheet" href="css/wlm85.css">
+<script src="js/theme.js"></script>
+<style>
+  .help-menu {
+    position: absolute;
+    top: 30px;
+    right: 10px;
+    -webkit-app-region: no-drag;
+  }
+  .signin {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 24px 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .signin .wlm-dp { margin-bottom: 14px; }
+
+  .form { width: 100%; }
+
+  .qr-box {
+    width: 100%;
+    height: 172px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid var(--wlm-field-border);
+    border-radius: 2px;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06);
+  }
+  .qr-box img.qr { width: 164px; height: 164px; image-rendering: pixelated; }
+  .qr-wait { color: #8d8d8d; }
+
+  .status-row { margin: 12px 0 10px; color: var(--wlm-label); }
+  .status-row .wlm-dropdown { margin-left: 4px; }
+
+  .actions { margin: 10px 0 0; text-align: center; min-height: 58px; color: #8d8d8d; }
+  .signing-in { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 30px; color: var(--wlm-label); }
+
+  .links {
+    align-self: stretch;
+    margin-top: auto;
+    padding: 8px 0 6px;
+    line-height: 1.55;
+  }
+  .links .step { color: var(--wlm-label); }
+
+  .footer {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px 8px;
+    color: #4a4a4a;
+    font-size: 11px;
+  }
+  .footer img { width: 14px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="wlm-window">
+  <div class="wlm-titlebar">
+    <img class="title-icon" src="assets/wlm85/messenger-icon.png" alt="">
+    <div class="title-text">Ruindows Live Messenger</div>
+  </div>
+  <div class="wlm-caption">
+    <button class="minimize" title="Minimizar"><svg class="glyph" width="10" height="5"><rect x="0.5" y="1.5" width="9" height="3" fill="#fff" stroke="#384c66"/></svg></button>
+    <button title="Maximizar" disabled><svg class="glyph" width="11" height="9"><rect x="0.5" y="0.5" width="10" height="8" fill="none" stroke="#384c66"/><rect x="1.5" y="1.5" width="8" height="6" fill="none" stroke="#fff"/><rect x="2.5" y="3.5" width="6" height="3" fill="#cfdbe8" stroke="#384c66"/></svg></button>
+    <button class="close" title="Fechar"><svg class="glyph" width="12" height="10"><path d="M2 1.5l8 7M10 1.5l-8 7" stroke="#5a1a0c" stroke-width="3.2" stroke-linecap="round"/><path d="M2 1.5l8 7M10 1.5l-8 7" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+  <div class="help-menu"><span class="wlm-dropdown" id="helpMenu">Ajuda</span></div>
+
+  <div class="signin">
+    <div class="wlm-dp">
+      <img class="pic" id="loginDp" src="assets/wlm85/avatar-default.png" alt="">
+      <img class="frame" id="loginFrame" src="assets/wlm85/frame-neutral.png" alt="">
+    </div>
+
+    <div class="form" id="form">
+      <div class="wlm-label">Código de acesso do WhatsApp:</div>
+      <div class="qr-box">
+        <div class="qr-wait" id="qrWait">Conectando...</div>
+        <img class="qr" id="qrImage" hidden alt="Código QR de acesso">
+      </div>
+
+      <div class="status-row">Entrar como: <span class="wlm-dropdown" id="loginStatus">Online</span></div>
+
+      <!-- the WhatsApp session always persists, so these just state the truth -->
+      <label class="wlm-check"><input type="checkbox" checked onclick="return false"> Lembrar-me</label>
+      <label class="wlm-check"><input type="checkbox" checked onclick="return false"> Entrar automaticamente</label>
+    </div>
+
+    <div class="actions">
+      <div id="waiting">Aguardando a leitura do código...</div>
+      <div class="signing-in" id="signingIn" hidden>
+        <img src="assets/wlm85/signing-in.gif" width="86" height="41" alt="">
+        Entrando...
+      </div>
+    </div>
+
+    <div class="links">
+      <div class="step">1. Abra o WhatsApp no celular</div>
+      <div class="step">2. Toque em <b>Aparelhos conectados</b></div>
+      <div class="step">3. Toque em <b>Conectar um aparelho</b></div>
+      <div><span class="wlm-link" id="statusLink">Status do serviço</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <img src="assets/wlm85/live-flag.png" alt="">
+    Ruindows Live ID
+  </div>
+</div>
+
+<script src="js/chrome.js"></script>
+<script src="js/menus.js"></script>
+<script src="js/sounds.js"></script>
+<script>
+  // my picture from last time, shown while signing in
+  window.msn.cachedMyDp?.().then((src) => { if (src) document.getElementById('loginDp').src = src; });
+
+  // sign in with the status I left with (frame color and "Entrar como")
+  const LOGIN_STATUS = {
+    online: ['Online', 'frame-online'],
+    busy: ['Ocupado', 'frame-busy'],
+    away: ['Ausente', 'frame-away'],
+    offline: ['Aparecer offline', 'frame-offline'],
+  };
+  const statusEl = document.getElementById('loginStatus');
+  function showLoginStatus(s) {
+    if (!LOGIN_STATUS[s]) return;
+    statusEl.textContent = LOGIN_STATUS[s][0];
+    document.getElementById('loginFrame').src = `assets/wlm85/${LOGIN_STATUS[s][1]}.png`;
+  }
+  window.msn.getStatus?.().then(showLoginStatus);
+  statusEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = statusEl.getBoundingClientRect();
+    Menus.popup(Object.entries(LOGIN_STATUS).map(([key, [label]]) => ({
+      label,
+      action: () => { window.msn.setStatus(key); showLoginStatus(key); },
+    })), r.left, r.bottom + 2);
+  });
+  const helpMenu = document.getElementById('helpMenu');
+  helpMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = helpMenu.getBoundingClientRect();
+    Menus.popup([{ label: 'Sobre o Ruindows Live Messenger', action: () => Menus.showAbout() }], r.left, r.bottom + 2);
+  });
+
+  const qrImage = document.getElementById('qrImage');
+  const qrWait = document.getElementById('qrWait');
+  const waiting = document.getElementById('waiting');
+  const signingIn = document.getElementById('signingIn');
+
+  document.getElementById('statusLink').addEventListener('click', () =>
+    window.msn.openExternal('https://downdetector.com.br/fora-do-ar/whatsapp/'));
+
+  window.msn.onQr((dataUrl) => {
+    qrImage.src = dataUrl;
+    qrImage.hidden = false;
+    qrWait.hidden = true;
+  });
+
+  window.msn.onOpen(() => {
+    // 8.5 swaps the whole form for the animation while signing in
+    document.getElementById('form').hidden = true;
+    waiting.hidden = true;
+    signingIn.hidden = false;
+    try { Sounds.signin(); } catch {}
+  });
+
+  window.msn.onClosed(({ loggedOut }) => {
+    if (!loggedOut) qrWait.textContent = 'Reconectando...';
+  });
+</script>
+</body>
+</html>

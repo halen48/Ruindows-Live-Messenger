@@ -1,0 +1,271 @@
+/* =========================================================================
+   Windows Live Messenger 8.5 look and feel. Loaded after msn.css by the
+   windows that have been reskinned; the rest still use the MSN 6 chrome.
+   Artwork lives in assets/wlm85/ (from msn-js, personal use only).
+   ========================================================================= */
+
+@font-face { font-family: 'Selawik'; src: url('../fonts/selawk.woff2') format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Selawik'; src: url('../fonts/selawksb.woff2') format('woff2'); font-weight: 600; }
+@font-face { font-family: 'Selawik'; src: url('../fonts/selawkb.woff2') format('woff2'); font-weight: 700; }
+
+:root {
+  --wlm-font: 'Segoe UI', Selawik, Tahoma, sans-serif;
+  --wlm-frame: #6d8099;
+  --wlm-text: #1e1e1e;
+  --wlm-label: #3d3d3d;
+  --wlm-link: #0b5bc4;
+  --wlm-field-border: #a4b4c6;
+}
+
+html, body {
+  font-family: var(--wlm-font);
+  font-size: 12px;
+  color: var(--wlm-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: auto;
+}
+
+/* ---- skinned window frame ------------------------------------------------ */
+
+.wlm-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border: 1px solid var(--wlm-frame);
+  border-radius: 7px 7px 4px 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  background: linear-gradient(180deg, #cfe6f2 0px, #e6f3f9 70px, #f6fbfd 180px, #ffffff 100%);
+}
+
+.wlm-titlebar {
+  flex: none;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 120px 0 7px;
+  -webkit-app-region: drag;
+}
+
+.wlm-titlebar .title-icon { width: 16px; height: 16px; flex: none; }
+
+.wlm-titlebar .title-text {
+  font-size: 12px;
+  color: #2c3e52;
+  text-shadow: 0 0 6px #fff, 0 0 2px #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Vista-style caption buttons hanging from the top edge */
+.wlm-caption {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  display: flex;
+  -webkit-app-region: no-drag;
+  border: 1px solid #4d5f78;
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.wlm-caption button {
+  width: 26px;
+  height: 18px;
+  border: none;
+  border-left: 1px solid #6f829a;
+  background:
+    linear-gradient(180deg, #f4f7fb 0%, #e3eaf3 45%, #c8d5e4 50%, #d7e3f0 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  background-repeat: no-repeat;
+}
+
+.wlm-caption button:first-child { border-left: none; }
+.wlm-caption button:hover { filter: brightness(1.08) saturate(1.4); }
+.wlm-caption button:active { filter: brightness(0.9); }
+.wlm-caption button[disabled] { filter: none; }
+
+.wlm-caption button.close {
+  width: 44px;
+  background:
+    linear-gradient(180deg, #e9a99b 0%, #d7705a 45%, #c3401f 50%, #d4613f 85%, #e0866a 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 210, 0.5);
+}
+
+.wlm-caption button .glyph { display: block; margin: auto; }
+
+/* ---- form controls ---------------------------------------------------------- */
+
+.wlm-label { color: var(--wlm-label); margin-bottom: 3px; }
+
+.wlm-link { color: var(--wlm-link); text-decoration: none; cursor: pointer; }
+.wlm-link:hover { text-decoration: underline; }
+
+.wlm-dropdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--wlm-text);
+}
+
+.wlm-dropdown::after {
+  content: '';
+  border: 3px solid transparent;
+  border-top: 4px solid #3d3d3d;
+  margin-top: 4px;
+}
+
+.wlm-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  color: var(--wlm-text);
+}
+
+/* Vista checkbox: white glassy box, dark check */
+.wlm-check input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  border: 1px solid #8e8f8f;
+  border-radius: 0;
+  background: linear-gradient(135deg, #dcdcdc 0%, #f4f4f4 60%, #ffffff 100%);
+  box-shadow: inset 0 0 0 1px #f4f4f4;
+}
+
+.wlm-check input:checked {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='8'%3E%3Cpath d='M1 4l2.5 2.5L8 1' fill='none' stroke='%231c3c64' stroke-width='1.8'/%3E%3C/svg%3E") center no-repeat,
+    linear-gradient(135deg, #dcdcdc 0%, #f4f4f4 60%, #ffffff 100%);
+}
+
+.wlm-check:hover input { border-color: #3c7fb1; }
+
+.wlm-button {
+  font-family: var(--wlm-font);
+  font-size: 12px;
+  color: #1e1e1e;
+  min-width: 68px;
+  height: 23px;
+  padding: 0 12px;
+  border: 1px solid #3c7fb1;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #eaf6fd 0%, #d9f0fc 45%, #bee6fd 50%, #a7d9f5 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
+.wlm-button:hover { border-color: #2c628b; filter: brightness(1.04); }
+.wlm-button:active { background: linear-gradient(180deg, #c4e5f6 0%, #98d1ef 50%, #6cbbe6 100%); }
+.wlm-button:disabled { color: #8d8d8d; border-color: #adb2b5; background: #f4f4f4; }
+
+/* ---- display picture in its glass frame -------------------------------------- */
+
+.wlm-dp {
+  position: relative;
+  width: 119px;
+  height: 119px;
+  flex: none;
+}
+
+.wlm-dp .pic {
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.wlm-dp .frame { position: absolute; inset: 0; width: 119px; height: 119px; }
+
+.wlm-dp.small { width: 62px; height: 62px; }
+.wlm-dp.small .pic { left: 6px; top: 6px; width: 47px; height: 47px; }
+.wlm-dp.small .frame { width: 62px; height: 62px; }
+
+/* ---- Vista-era menus, tooltips and dialogs (override the XP ones) ------- */
+
+.xp-menu {
+  background: #f0f0f0;
+  border: 1px solid #979797;
+  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.3);
+  padding: 2px;
+  background-image: linear-gradient(90deg, #f1f1f1 26px, #e2e3e3 26px, #e2e3e3 27px, #fff 27px, #f0f0f0 28px);
+}
+.xp-menu-item { padding: 3px 20px 3px 32px; border: 1px solid transparent; border-radius: 3px; }
+.xp-menu-item:hover:not(.disabled) {
+  background: linear-gradient(180deg, #f1f8fd, #d5effc);
+  border-color: #aeccec;
+  color: inherit;
+}
+.xp-menu-item.disabled { color: #8d8d8d; }
+.xp-menu-sep { background: #e0e0e0; margin: 3px 2px 3px 30px; border-bottom: 1px solid #fff; }
+
+.xp-tooltip {
+  background: linear-gradient(180deg, #fff, #e4e5f0);
+  border: 1px solid #767676;
+  border-radius: 2px;
+  padding: 2px 6px 3px;
+  color: #575757;
+  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.25);
+  font-family: var(--wlm-font);
+}
+
+.xp-dialog-overlay { background: rgba(0, 0, 0, 0.12); }
+.xp-dialog {
+  background: #f0f0f0;
+  border: 1px solid var(--wlm-frame);
+  border-radius: 6px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.xp-dialog-title {
+  background: linear-gradient(180deg, #cfe6f2, #e6f3f9);
+  color: #2c3e52;
+  font-family: var(--wlm-font);
+  font-weight: 400;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 0;
+}
+.xp-dialog-body { background: #fff; border-bottom: 1px solid #dfdfdf; }
+.xp-dialog-buttons { padding: 10px 12px; text-align: right; }
+.xp-dialog-buttons .wlm-button + .wlm-button { margin-left: 6px; }
+
+/* ---- scrollbars, Vista flavoured ------------------------------------------ */
+
+::-webkit-scrollbar { width: 17px; height: 17px; }
+::-webkit-scrollbar-track { background: linear-gradient(90deg, #e3e3e3, #f6f6f6 30%, #f6f6f6 70%, #e3e3e3); border: none; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #f3f3f3 0%, #e8e8e8 45%, #d6d6d6 50%, #dedede 100%);
+  border: 1px solid #9b9b9b;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px #fdfdfd;
+}
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, #e3f4fc, #c4e6f7 50%, #a9d9f2 50%, #c7e7f8); border-color: #3c7fb1; }
+::-webkit-scrollbar-button:single-button { background-color: #f0f0f0; border: 1px solid transparent; border-radius: 3px; }
+::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3.5 0L7 4H0z' fill='%23404040'/%3E%3C/svg%3E");
+}
+::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3.5 4L0 0h7z' fill='%23404040'/%3E%3C/svg%3E");
+}
+
+input[type='text'], textarea { font-family: var(--wlm-font); }
+
+/* ---- Dark mode ------------------------------------------------------------
+ * js/theme.js derives a dark version of every color in the page's styles;
+ * here only what has no color of its own to derive from. */
+html[data-theme='dark'] { color-scheme: dark; background: #2b2d31; }
+/* pictures that are part of the window, not content: dimmed to sit in the dark */
+html[data-theme='dark'] .banner img { filter: brightness(0.62) saturate(0.85); }
+/* native lists/dropdowns would otherwise be near black */
+html[data-theme='dark'] select { background-color: #34373c; color: #e4e6ea; }

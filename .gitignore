@@ -1,0 +1,10 @@
+node_modules/
+# Original MSN Messenger assets imported for private use — never committed
+src/renderer/assets/original/
+npm-debug.log*
+.DS_Store
+
+# WLM 8.5 artwork from msn-js (Microsoft assets, personal use only)
+src/renderer/assets/wlm85/
+vendor/
+dist/

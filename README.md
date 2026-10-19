@@ -14,6 +14,14 @@ janela. Aviso subindo do canto da tela. Emoticon de cerveja. E de brinde, o
 ChatGPT e o Claude na sua lista de contatos, porque se a gente não consegue
 mais ter amigos online às 3 da manhã, pelo menos tem IA.
 
+**Mas o verdadeiro motivo** é o cúmulo da preguiça: ter que abrir o WhatsApp
+num canto, o Telegram no outro, o ChatGPT numa aba, o Claude noutra, e ficar
+alt-tabando igual condenado. Chega. A ideia aqui é **juntar tudo numa coisa
+só** — toda rede, todo chat, toda IA — na mesma listinha de contatos do MSN.
+Um lugar, uma janela, um butterfly. Como a mesma pessoa pode estar em várias
+redes, cada contato ganha um **seloznho da rede** (zap, Telegram...) no canto
+do ícone, pra você não se perder no meio de 231318923 "João".
+
 Feito em Electron (sim, 300 MB de RAM pra um chat, é o preço da nostalgia).
 O zap entra pelo [Baileys](https://github.com/WhiskeySockets/Baileys).
 Nasceu de um fork do [eddmann/WhatsMSN](https://github.com/eddmann/WhatsMSN),
@@ -97,6 +105,8 @@ qualquer grupo), reação, mensagem editada ou quando ela lê o que você mandou
 ### IAs na lista de contatos
 - **ChatGPT**, **DeepSeek**, **Gemini** e **Claude** têm cada um a sua seção
   na lista, igual Grupos e Offline. Dois cliques em "Entrar no ..." e pronto.
+- **Gemini** tem uma "Nova conversa" pra cada modelo (Flash, Pro, Argon). O
+  modelo vira o subnick e entra no título da janela (ex.: *Gemini Pro*).
 - **Login**: clique em "Entrar no ..." > **Usar o login do Firefox**. O Google
   não deixa logar dentro de app nenhum ("Esse navegador ou app pode não ser
   seguro"), então o app pega a sessão que você já tem no Firefox (Google,
@@ -112,8 +122,8 @@ qualquer grupo), reação, mensagem editada ou quando ela lê o que você mandou
 - **Sessões do Claude Code** deste PC aparecem na seção do Claude, com o
   título que o Claude Code deu. Abre com o histórico (só os textos, sem as
   ferramentas) e dá pra mandar mensagem: roda `claude -p --resume` na pasta da
-  sessão. Sessão mexida nos últimos 2 minutos fica só leitura, pra não brigar
-  com o terminal onde ela está aberta.
+  sessão. O que você escreve (e a resposta) aparece ao vivo, venha do app ou
+  do terminal.
 - Os sites ficam abertos escondidos só enquanto trabalham; parados, são
   descarregados (senão comem CPU e até o mouse fica lento).
 - Não usa alguma? Botão direito > Esconder. Pra voltar: botão de adicionar
@@ -126,6 +136,19 @@ qualquer grupo), reação, mensagem editada ou quando ela lê o que você mandou
 - Funciona controlando o site por baixo dos panos, então quebra quando o site
   muda de layout. O login do Google (Gemini) às vezes acha que o app é robô.
   Ele tem razão.
+
+### Juntar tudo (o plano)
+A graça é não precisar abrir cinco apps. O WhatsApp e as IAs já estão aqui
+dentro. Cada contato mostra de qual rede ele é por um **seloznho** (zap verde,
+Telegram azul...), que é como você diferencia o mesmo "João" em três redes.
+
+- ✅ **WhatsApp** (via Baileys)
+- ✅ **IAs** (ChatGPT, DeepSeek, Gemini, Claude) e **Claude Code**
+- 🚧 **Telegram** — próximo da fila. Entra pela conta pessoal (MTProto), então
+  precisa de um `api_id` e `api_hash` seus, pegos de graça em
+  [my.telegram.org](https://my.telegram.org). Cada chat do Telegram vira um
+  contato na lista, com o selo azul.
+- 💭 **Discord, Instagram, etc.** — se a preguiça falar mais alto.
 
 ### Mídia e espaço em disco
 ☰ > **Opções de mídia...**

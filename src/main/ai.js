@@ -105,6 +105,23 @@ const WAIT_DONE = `async (selBusy, maxMs) => {
   return false;
 }`;
 
+// Open the model picker and choose the option matching `rx`. Returns a short
+// status string; never throws so a missing picker just means the default model.
+const SELECT_MODEL = `async (btnSel, optSel, rx) => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const re = new RegExp(rx, 'i');
+  const btn = document.querySelector(btnSel);
+  if (!btn) return 'no-picker';
+  // already on it? the button shows the current model
+  if (re.test(btn.getAttribute('aria-label') || btn.innerText || '')) return 'already';
+  btn.click();
+  for (let i = 0; i < 25 && !document.querySelector(optSel); i++) await sleep(150);
+  const opt = [...document.querySelectorAll(optSel)].find((o) => re.test(o.innerText));
+  if (opt) { opt.click(); await sleep(500); return 'selected'; }
+  btn.click(); // close the menu we opened
+  return 'not-found';
+}`;
+
 // ---- providers ----------------------------------------------------------------
 
 const PROVIDERS = {
@@ -214,6 +231,13 @@ const PROVIDERS = {
     busy: 'button[aria-label*="Stop"], button[aria-label*="Parar"]',
     idFromUrl: (url) => url.match(/\/app\/([\w-]+)/)?.[1] || null,
     loggedIn: `!!document.querySelector('a[href*="SignOutOptions"], img[src*="googleusercontent.com/a/"]') || !document.querySelector('a[href*="ServiceLogin"], a[href*="accounts.google.com/v3/signin"]')`,
+    // each "nova conversa" starts on a chosen model, shown as the subnick
+    modelPicker: { btn: 'button[data-test-id="bard-mode-menu-button"]', opt: '[data-test-id^="bard-mode-option"]' },
+    models: [
+      { id: 'flash', label: 'Flash', match: 'flash(?!\\s*lite)' },
+      { id: 'pro', label: 'Pro', match: '\\bpro\\b' },
+      { id: 'argon', label: 'Argon', match: 'argon' },
+    ],
     // no JSON API: read the sidebar
     list: `(async () => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -254,6 +278,7 @@ class AiService extends EventEmitter {
     this.queues = new Map(); // provider -> Promise chain (one action at a time)
     this.aliases = new Map(); // "ai:p:new-1" -> real conversation id
     this.cache = new Map(); // jid -> messages
+    this.convModels = new Map(); // ai:p:realid -> model label (subnick)
   }
 
   static providers() {
@@ -289,6 +314,14 @@ class AiService extends EventEmitter {
     const [, provider, conv] = jid.split(':');
     const real = this.aliases.get(jid) || (conv?.startsWith('new-') ? null : conv);
     return { provider, conv: real, p: PROVIDERS[provider] };
+  }
+
+  /** The model picked for a "new conversation" jid (ai:p:new-<ts>-m-<model>). */
+  _newModel(jid) {
+    const conv = jid.split(':')[2] || '';
+    const m = conv.match(/-m-([a-z0-9]+)$/);
+    const provider = jid.split(':')[1];
+    return (PROVIDERS[provider]?.models || []).find((x) => x.id === m?.[1]) || null;
   }
 
   _win(provider) {
@@ -407,6 +440,7 @@ class AiService extends EventEmitter {
             jid: `ai:${id}:${c.id}`,
             title: c.title || 'Sem título',
             updated: c.updated || 0,
+            model: this.convModels.get(`ai:${id}:${c.id}`) || null,
           }));
         }
       } catch (e) {
@@ -424,6 +458,7 @@ class AiService extends EventEmitter {
       loggedIn: !!this.state.get(id)?.loggedIn,
       checked: this.state.has(id),
       conversations: this.state.get(id)?.conversations || [],
+      models: PROVIDERS[id].models ? PROVIDERS[id].models.map((m) => ({ id: m.id, label: m.label })) : undefined,
       codeSessions: id === 'claude' ? this.codeSessions : undefined,
     }));
   }
@@ -434,7 +469,9 @@ class AiService extends EventEmitter {
     const { provider, conv } = this._parse(jid);
     const p = PROVIDERS[provider];
     const c = this.state.get(provider)?.conversations.find((x) => x.jid === `ai:${provider}:${conv}`);
-    return c ? `${p.name} - ${c.title}` : `${p?.name || 'IA'} - Nova conversa`;
+    const model = this.convModels.get(`ai:${provider}:${conv}`) || this._newModel(jid)?.label;
+    const name = model ? `${p?.name} ${model}` : (p?.name || 'IA');
+    return c ? `${name} - ${c.title}` : `${name} - Nova conversa`;
   }
 
   _toUi(jid, provider, m, i) {
@@ -491,11 +528,15 @@ class AiService extends EventEmitter {
    * conv null starts a new conversation. Resolves { conv, text } (text null
    * if the answer couldn't be read); throws if sending failed.
    */
-  _ask(provider, conv, text) {
+  _ask(provider, conv, text, model) {
     const p = PROVIDERS[provider];
     return this._enqueue(provider, async () => {
       const win = this._win(provider);
       await this._go(win, conv ? p.convUrl(conv) : p.home);
+      // a fresh conversation can start on a chosen model
+      if (!conv && model && p.modelPicker) {
+        try { await this._eval(win, `(${SELECT_MODEL})(${JSON.stringify(p.modelPicker.btn)}, ${JSON.stringify(p.modelPicker.opt)}, ${JSON.stringify(model.match)})`); } catch {}
+      }
       await this._eval(win, `(${TYPE_AND_SEND})(${JSON.stringify(p.input)}, ${JSON.stringify(p.send)}, ${JSON.stringify(text)})`);
       await this._eval(win, `(${WAIT_DONE})(${JSON.stringify(p.busy)}, 180000)`);
       // a new chat gets its id from the page address
@@ -522,9 +563,13 @@ class AiService extends EventEmitter {
     const mine = { id: `${jid}:me-${Date.now()}`, chatJid: jid, fromMe: true, text, isNudge: false, timestamp: Date.now() };
     this.cache.set(jid, [...(this.cache.get(jid) || []), mine]);
     this.emit('presence', { jid, presence: 'composing' });
-    this._ask(provider, conv, text)
+    const model = conv ? null : this._newModel(jid);
+    this._ask(provider, conv, text, model)
       .then(({ conv: id, text: answer, index }) => {
-        if (id && !conv) this.aliases.set(jid, id);
+        if (id && !conv) {
+          this.aliases.set(jid, id);
+          if (model) this.convModels.set(`ai:${provider}:${id}`, model.label);
+        }
         if (!answer) return this.emit('message', this._notice(jid, provider, 'Não consegui ler a resposta. Veja a conversa no site.'));
         const ui = this._toUi(jid, provider, { role: 'ai', text: answer }, index);
         ui.timestamp = Date.now();

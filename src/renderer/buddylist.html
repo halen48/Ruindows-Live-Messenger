@@ -698,12 +698,19 @@
         row.addEventListener('click', (e) => aiLoginMenu(prov, e));
         listEl.appendChild(row);
       } else {
-        listEl.appendChild(aiRow('Nova conversa', {
-          icon: 'assets/wlm85/status16-online.png',
-          onOpen: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}`),
-        }));
+        // one "nova conversa" per model (e.g. Gemini Flash / Pro), or just one
+        const starts = prov.models && prov.models.length
+          ? prov.models.map((m) => ({ sub: m.label, suffix: `-m-${m.id}` }))
+          : [{ sub: null, suffix: '' }];
+        for (const s of starts) {
+          listEl.appendChild(aiRow('Nova conversa', {
+            icon: 'assets/wlm85/status16-online.png',
+            sub: s.sub,
+            onOpen: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}${s.suffix}`),
+          }));
+        }
         for (const c of convs) {
-          listEl.appendChild(aiRow(c.title, { jid: c.jid, onOpen: () => window.msn.openChat(c.jid) }));
+          listEl.appendChild(aiRow(c.title, { jid: c.jid, sub: c.model, onOpen: () => window.msn.openChat(c.jid) }));
         }
       }
       for (const c of code) {
@@ -802,7 +809,9 @@
     e.preventDefault();
     e.stopPropagation();
     Menus.popup([
-      { label: 'Nova conversa', action: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}`), disabled: !prov.loggedIn },
+      ...(prov.models && prov.models.length
+        ? prov.models.map((m) => ({ label: `Nova conversa (${m.label})`, action: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}-m-${m.id}`), disabled: !prov.loggedIn }))
+        : [{ label: 'Nova conversa', action: () => window.msn.openChat(`ai:${prov.id}:new-${Date.now()}`), disabled: !prov.loggedIn }]),
       { label: 'Atualizar conversas', action: () => window.msn.aiRefresh() },
       { label: 'Usar o login do Firefox', action: importFirefoxLogin },
       { label: prov.loggedIn ? 'Entrar com outra conta...' : `Entrar no ${prov.name}...`, action: () => window.msn.aiLogin(prov.id) },

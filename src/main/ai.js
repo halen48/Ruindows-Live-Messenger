@@ -54,6 +54,16 @@ function useLoginFriendlyAgent(contents) {
     const ua = agentFor(e?.url || url);
     if (contents.getUserAgent() !== ua) contents.setUserAgent(ua);
   });
+  // "Entrar com Google" goes site -> its OAuth URL -> redirect to Google.
+  // Changing the agent mid-redirect crashes Electron, so the redirect is
+  // dropped and Google's URL is loaded fresh, already as Firefox.
+  contents.on('will-redirect', (e, url, _inPlace, isMainFrame) => {
+    const target = e?.url || url;
+    if ((e?.isMainFrame ?? isMainFrame) === false) return;
+    if (agentFor(target) === contents.getUserAgent()) return;
+    e.preventDefault();
+    setImmediate(() => { if (!contents.isDestroyed()) contents.loadURL(target, { userAgent: agentFor(target) }).catch(() => {}); });
+  });
   contents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, width: 520, height: 680 } }));
   contents.on('did-create-window', (child, { url } = {}) => {
     useLoginFriendlyAgent(child.webContents);
@@ -63,18 +73,25 @@ function useLoginFriendlyAgent(contents) {
 }
 
 const hookedSessions = new WeakSet();
-/** Firefox user agent on every request to Google's sign-in. */
+/**
+ * Firefox headers on everything a Google sign-in page loads, not only on
+ * accounts.google.com: the page also hits gstatic, play.google.com etc., and
+ * a single request still saying Chrome is enough for Google to refuse.
+ */
 function hookSession(ses) {
   if (hookedSessions.has(ses)) return;
   hookedSessions.add(ses);
-  ses.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*', 'https://*.accounts.google.com/*', 'https://accounts.youtube.com/*'] }, (details, cb) => {
-    details.requestHeaders['User-Agent'] = FIREFOX_UA;
-    // Chrome-only hints would give the Firefox identity away
-    for (const h of Object.keys(details.requestHeaders)) if (/^sec-ch-ua/i.test(h)) delete details.requestHeaders[h];
+  ses.webRequest.onBeforeSendHeaders((details, cb) => {
+    let page = '';
+    try { page = details.webContents?.getURL() || ''; } catch {}
+    if (GOOGLE_SIGNIN.test(details.url) || GOOGLE_SIGNIN.test(page)) {
+      details.requestHeaders['User-Agent'] = FIREFOX_UA;
+      // Chrome-only hints would give the Firefox identity away
+      for (const h of Object.keys(details.requestHeaders)) if (/^sec-ch-ua/i.test(h)) delete details.requestHeaders[h];
+    }
     cb({ requestHeaders: details.requestHeaders });
   });
 }
-
 // ---- page-side helpers (run inside the provider's page) ---------------------
 
 // Types text into a textarea or a contenteditable editor the way a user would.
@@ -417,7 +434,13 @@ class AiService extends EventEmitter {
     // logged out: straight to the sign-in page (some home pages go blank
     // without a session); logged in: back to the site if it was blanked
     const p = PROVIDERS[provider];
-    if (!this.state.get(provider)?.loggedIn && p.loginUrl) win.loadURL(p.loginUrl).catch(() => {});
+    if (!this.state.get(provider)?.loggedIn && p.loginUrl) {
+      // stop the home page still loading, and start Google's sign-in already
+      // as Firefox instead of switching mid-way (that races, and loses)
+      win.webContents.stop();
+      win.webContents.setUserAgent(agentFor(p.loginUrl));
+      win.loadURL(p.loginUrl, { userAgent: agentFor(p.loginUrl) }).catch(() => {});
+    }
     else if (!win.webContents.getURL().startsWith(new URL(p.home).origin)) win.loadURL(p.home).catch(() => {});
     win.show();
     win.focus();

@@ -43,6 +43,7 @@ class TelegramService extends EventEmitter {
     this.mediaDir = stateFile ? path.join(path.dirname(stateFile), 'media') : null;
     // gramjs messages with media, by UI id, so the window can ask to download
     this.rawMedia = new Map();
+    this.lastMsg = new Map(); // jid -> newest gramjs message, for offline messages
     // resolves once a saved session finished connecting (or turned out invalid)
     this.ready = new Promise((r) => { this._setReady = r; });
     this.safeStorage = safeStorage || null;
@@ -284,6 +285,7 @@ class TelegramService extends EventEmitter {
         if (!ent) continue;
         const id = String(d.id?.value ?? d.id);
         this.entities.set(id, ent);
+        if (d.message) this.lastMsg.set(JID_PREFIX + id, d.message);
         const isGroup = !!(d.isGroup || d.isChannel);
         const pres = isGroup ? { presence: 'available' } : this._presenceOf(ent);
         chats.push({
@@ -329,6 +331,18 @@ class TelegramService extends EventEmitter {
 
   getRoster() {
     return this.chats;
+  }
+
+  /** Unread conversations whose latest message came after `since` (seconds): sent while I was offline. */
+  async unreadSince(since) {
+    const out = [];
+    for (const c of this.chats) {
+      const m = this.lastMsg.get(c.jid);
+      if (!c.unread || !m || m.out || Number(m.date) <= since) continue;
+      const ui = await this._withSender(c.jid, m);
+      if (ui.text || ui.media) out.push(ui);
+    }
+    return out;
   }
 
   _idOf(jid) {

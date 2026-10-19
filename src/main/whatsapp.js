@@ -142,6 +142,7 @@ class WhatsAppService extends EventEmitter {
       }
       if (qr) this.emit('qr', qr);
       if (connection === 'open') {
+        this.connected = true;
         this.me = {
           jid: this._bareJid(sock.user?.id),
           name: sock.user?.name || 'Me',
@@ -157,6 +158,8 @@ class WhatsAppService extends EventEmitter {
         this._fetchAbouts().catch(() => {});
       }
       if (connection === 'close') {
+        if (this.connected) this.lastOnline = Math.floor(Date.now() / 1000);
+        this.connected = false;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         if (process.env.MSN_DEBUG) {
           console.log('[wa] close statusCode=', statusCode,
@@ -1152,7 +1155,16 @@ class WhatsAppService extends EventEmitter {
     }
 
     const ui = this._toUiMessage(msg);
+    // WhatsApp couldn't hand over the keys yet ("Waiting for this message"):
+    // show a placeholder; the real message replaces it when it's re-sent
+    if (ui.text == null && msg.messageStubType === 2 && !msg.key.fromMe) {
+      this._logDecrypt(jid, msg);
+      ui.text = '⏳ Esperando esta mensagem. O WhatsApp vai reenviar (abrir o WhatsApp no celular ajuda).';
+      ui.pending = true;
+    }
     if (ui.text == null) return;
+    // a message sent while I was offline: it pops its window like a new one
+    const offline = !ui.fromMe && silent && this.prevOnline && ui.timestamp / 1000 > this.prevOnline;
 
     if (!msg.key.fromMe && msg.pushName) {
       const senderJid = this._bareJid(msg.key.participant || msg.key.remoteJid);
@@ -1168,6 +1180,16 @@ class WhatsAppService extends EventEmitter {
 
     const list = this.messages.get(jid) || [];
     const existing = list.find((m) => m.id === ui.id);
+    if (existing?.pending && !ui.pending) {
+      // the re-sent copy arrived: swap the placeholder for the real thing
+      for (const k of Object.keys(existing)) delete existing[k];
+      Object.assign(existing, ui);
+      this.emit('message-updated', existing);
+      const chat = this.chats.get(jid);
+      if (chat) { chat.lastMessage = ui.text; this._emitRoster(); }
+      this._scheduleSave();
+      return;
+    }
     if (existing) {
       // re-fetched history: fill in what older versions of the app didn't keep
       let changed = false;
@@ -1185,7 +1207,7 @@ class WhatsAppService extends EventEmitter {
     const chat = this.chats.get(jid) || { jid, unread: 0 };
     chat.lastMessage = ui.text;
     chat.lastTimestamp = ui.timestamp / 1000;
-    if (!silent && !ui.fromMe) chat.unread = (chat.unread || 0) + 1;
+    if ((!silent || offline) && !ui.fromMe) chat.unread = (chat.unread || 0) + 1;
     if (ui.fromMe && !jid.endsWith('@g.us')) chat.lastOutgoing = Math.max(chat.lastOutgoing || 0, ui.timestamp / 1000);
     if (!ui.fromMe) {
       if (!jid.endsWith('@g.us')) chat.lastIncoming = Math.max(chat.lastIncoming || 0, ui.timestamp / 1000);
@@ -1194,7 +1216,16 @@ class WhatsAppService extends EventEmitter {
     this.chats.set(jid, chat);
 
     if (!silent) this.emit('message', ui);
+    else if (offline) this.emit('offline-message', ui);
     this._emitRoster();
+  }
+
+  /** Why a message couldn't be decrypted (no content), in wa-data/decrypt.log. */
+  _logDecrypt(jid, msg) {
+    try {
+      const line = JSON.stringify({ at: new Date().toISOString(), chat: jid.endsWith('@g.us') ? 'grupo' : jid.endsWith('@lid') ? 'lid' : 'pn', err: msg.messageStubParameters?.[0] || '?' });
+      fs.appendFileSync(path.join(this.dataDir, 'decrypt.log'), line + '\n');
+    } catch {}
   }
 
   _emitRoster() {
@@ -1219,6 +1250,10 @@ class WhatsAppService extends EventEmitter {
       this.memberLabels = new Map(raw.memberLabels || []);
       this.seen = new Map(raw.seen || []);
       this.favStickers = new Map(raw.favStickers || []);
+      // the end of the previous session: anything newer that comes in while
+      // the app catches up was sent to me while I was offline
+      this.lastOnline = Number(raw.lastOnline) || 0;
+      this.prevOnline = this.lastOnline;
     } catch {
       /* first run */
     }
@@ -1307,6 +1342,7 @@ class WhatsAppService extends EventEmitter {
           memberLabels: [...this.memberLabels],
           seen: [...this.seen],
           favStickers: [...this.favStickers],
+          lastOnline: this.connected ? Math.floor(Date.now() / 1000) : this.lastOnline || 0,
         })
       );
     } catch {

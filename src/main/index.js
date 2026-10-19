@@ -481,6 +481,20 @@ async function startWhatsApp() {
   wa.on('stickers', () => broadcast('wa:stickers'));
   wa.on('message-updated', (m) => broadcast('wa:messageUpdated', m));
   wa.on('message', (msg) => deliverMessage(msg));
+  // messages sent while I was offline arrive in a burst when the app catches
+  // up: like MSN's offline messages, each conversation pops its window (once,
+  // with its latest message) as soon as the list is up
+  const offlinePending = new Map();
+  let offlineTimer = null;
+  wa.on('offline-message', (msg) => {
+    offlinePending.set(msg.chatJid, msg);
+    clearTimeout(offlineTimer);
+    offlineTimer = setTimeout(function flush() {
+      if (!buddyWin) { offlineTimer = setTimeout(flush, 1000); return; }
+      for (const m of offlinePending.values()) deliverMessage(m);
+      offlinePending.clear();
+    }, 1500);
+  });
 
   wa.on('error', (e) => console.error('[whatsapp]', e));
 
@@ -853,8 +867,19 @@ app.whenReady().then(async () => {
   if (aiShown().length) setTimeout(() => ai.refresh(), 3000);
   // resume a saved Telegram session quietly; if it needs a fresh login the
   // user starts one from the add-contact menu
-  if (!process.env.MSN_DEMO) tg.resume().catch(() => {});
-  if (!process.env.MSN_DEMO) ig.resume().catch(() => {});
+  // when was the app last online (before this run): Telegram/Instagram
+  // conversations with unread messages newer than that pop their windows,
+  // like MSN's offline messages (WhatsApp keeps its own mark)
+  const prevOnline = Number(settings.lastOnline) || 0;
+  const markOnline = () => { settings.lastOnline = Math.floor(Date.now() / 1000); saveSettings(); };
+  setInterval(markOnline, 60000);
+  app.on('before-quit', markOnline);
+  const popOffline = async (net) => {
+    if (!prevOnline) return;
+    for (const m of await net.unreadSince(prevOnline).catch(() => [])) deliverMessage(m);
+  };
+  if (!process.env.MSN_DEMO) tg.resume().then((ok) => ok && popOffline(tg)).catch(() => {});
+  if (!process.env.MSN_DEMO) ig.resume().then((ok) => ok && popOffline(ig)).catch(() => {});
   await startWhatsApp();
 });
 

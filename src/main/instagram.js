@@ -266,6 +266,19 @@ class InstagramService extends EventEmitter {
   }
 
   getRoster() { return this.chats; }
+
+  /** Unread conversations whose latest message came after `since` (seconds): sent while I was offline. */
+  async unreadSince(since) {
+    const out = [];
+    for (const c of this.chats) {
+      if (!c.unread) continue;
+      const t = this.threads.get(this._idOf(c.jid));
+      const theirs = t ? this._sorted(t).filter((m) => !this._isMine(m)) : [];
+      const m = theirs[theirs.length - 1];
+      if (m && Number(m.timestamp_ms) / 1000 > since) out.push(this._toUi(c.jid, m, t));
+    }
+    return out;
+  }
   _idOf(jid) { return jid.slice(JID_PREFIX.length); }
 
   _sorted(t) {

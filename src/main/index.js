@@ -77,6 +77,7 @@ function setMyStatus(status) {
   settings.status = status;
   saveSettings();
   try { tray?.setToolTip(`Ruindows Live Messenger - ${STATUS_LABEL[status]}`); } catch {}
+  setTrayStatus(status);
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('ui:status', status);
   }
@@ -295,15 +296,31 @@ function fallbackTrayImage() {
   return nativeImage.createFromBitmap(buf, { width: size, height: size });
 }
 
+// the MSN butterfly in the tray: green/amber/red/grey when signed in (follows
+// the status), and the blue+green 4-colour one only while connecting
+const trayCache = new Map();
+// away, brb, lunch share the amber wing; phone shares busy's red, like 8.5
+const TRAY_WING = { online: 'online', busy: 'busy', phone: 'busy', away: 'away', brb: 'away', lunch: 'away', offline: 'offline' };
+async function butterflyImage(key) {
+  if (trayCache.has(key)) return trayCache.get(key);
+  const file = key === 'connecting' ? 'butterfly.svg' : `butterfly-${key}.svg`;
+  let img = null;
+  try { img = await renderSvgToImage(path.join(RENDERER, 'assets', file), 32); } catch {}
+  if (!img || img.isEmpty()) img = fallbackTrayImage();
+  trayCache.set(key, img);
+  return img;
+}
+async function setTrayStatus(state) {
+  if (!tray || tray.isDestroyed?.()) return;
+  const key = state === 'connecting' ? 'connecting' : (TRAY_WING[state] || 'online');
+  const img = await butterflyImage(key);
+  const traySize = process.platform === 'linux' ? 22 : 16;
+  try { tray.setImage(img.resize({ width: traySize, height: traySize, quality: 'best' })); } catch {}
+}
+
 async function setupTray() {
-  let image = nativeImage.createFromPath(TRAY_ICON);
-  if (image.isEmpty()) {
-    try {
-      image = await renderSvgToImage(path.join(RENDERER, 'assets', 'buddy-online.svg'), 32);
-    } catch (e) {
-      if (process.env.MSN_DEBUG) console.log('[tray] render failed:', e.message);
-    }
-  }
+  // start on the "connecting" butterfly; it turns green once WhatsApp is up
+  let image = await butterflyImage('connecting');
   if (!image || image.isEmpty()) image = fallbackTrayImage();
 
   try {
@@ -390,6 +407,7 @@ async function startWhatsApp() {
       }
       broadcast('wa:open', me);
       broadcast('wa:roster', fullRoster());
+      setTrayStatus(myStatus || 'online');
     };
     // let the sign-in window play its "Entrando..." animation first, like 8.5 did
     if (loginWin) {
@@ -403,6 +421,7 @@ async function startWhatsApp() {
   wa.on('closed', ({ loggedOut }) => broadcast('wa:closed', { loggedOut }));
 
   wa.on('logged-out', () => {
+    setTrayStatus('connecting');
     if (!loginWin) createLoginWindow(); // first, so closing the rest can't quit the app
     for (const [, win] of chatWins) win.close();
     if (buddyWin) {

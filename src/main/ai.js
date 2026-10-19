@@ -37,11 +37,29 @@ const CHROME_UA = `Mozilla/5.0 (${CHROME_PLATFORM}) AppleWebKit/537.36 (KHTML, l
 // forever.
 const FIREFOX_UA = `Mozilla/5.0 (${process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10.15' : 'X11; Linux x86_64'}; rv:140.0) Gecko/20100101 Firefox/140.0`;
 
+// Google's sign-in refuses embedded browsers unless the WHOLE identity says
+// Firefox: the header alone isn't enough, the page's navigator.userAgent has
+// to agree, or Google spots the contradiction ("navegador pode não ser
+// seguro"). So the window switches to Firefox while it's on Google's sign-in
+// pages and back to Chrome everywhere else (Firefox on gemini.google.com
+// itself made the app reload in a loop).
+const GOOGLE_SIGNIN = /^https:\/\/(accounts\.google\.[a-z.]+|accounts\.youtube\.com)\//i;
+const agentFor = (url) => (GOOGLE_SIGNIN.test(url || '') ? FIREFOX_UA : CHROME_UA);
+
 /** One window, and the popups it opens (like "Continuar com o Google"), in the same session. */
 function useLoginFriendlyAgent(contents) {
   contents.setUserAgent(CHROME_UA);
+  contents.on('did-start-navigation', (e, url, _inPlace, isMainFrame) => {
+    if ((e?.isMainFrame ?? isMainFrame) === false) return;
+    const ua = agentFor(e?.url || url);
+    if (contents.getUserAgent() !== ua) contents.setUserAgent(ua);
+  });
   contents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, width: 520, height: 680 } }));
-  contents.on('did-create-window', (child) => useLoginFriendlyAgent(child.webContents));
+  contents.on('did-create-window', (child, { url } = {}) => {
+    useLoginFriendlyAgent(child.webContents);
+    // a popup that opens straight on Google's sign-in starts as Firefox
+    if (url) child.webContents.setUserAgent(agentFor(url));
+  });
 }
 
 const hookedSessions = new WeakSet();

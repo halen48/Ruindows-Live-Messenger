@@ -144,11 +144,15 @@ Telegram azul...), que é como você diferencia o mesmo "João" em três redes.
 
 - ✅ **WhatsApp** (via Baileys)
 - ✅ **IAs** (ChatGPT, DeepSeek, Gemini, Claude) e **Claude Code**
-- ✅ **Telegram** — conta pessoal (MTProto). Entra por **QR code** (escaneia no
-  Telegram do celular: Config. > Dispositivos > Conectar dispositivo) ou por
-  telefone/SMS. Precisa de um `api_id`/`api_hash` seus, de graça em
-  [my.telegram.org](https://my.telegram.org) (uma vez só — identificam o app,
-  não você). Os chats entram na lista com o boneco azul.
+- ✅ **Telegram** — conta pessoal (MTProto). **Só escaneia o QR code** (no
+  celular: Config. > Dispositivos > Conectar dispositivo) e pronto, zero
+  configuração. O app já vem com credenciais de app embutidas (as públicas do
+  Telegram Desktop), então você não precisa do my.telegram.org. Isso é seguro:
+  o `api_hash` identifica o *app*, não a conta — quem tem ele não entra na sua
+  conta (pra isso precisa do seu login). O que protege a conta é a sessão, que
+  fica **criptografada no seu PC** e nunca sai dele. Quem quiser usa as
+  próprias credenciais ou telefone/SMS em "Avançado". Os chats entram na lista
+  com o boneco azul.
 - 💭 **Discord, Instagram, etc.** — se a preguiça falar mais alto.
 
 ### Mídia e espaço em disco

@@ -20,6 +20,13 @@ const EventEmitter = require('events');
 const JID_PREFIX = 'tg:';
 const isTgJid = (jid) => typeof jid === 'string' && jid.startsWith(JID_PREFIX);
 
+// Built-in app credentials (Telegram Desktop's public ones) so the user just
+// scans a QR and never has to touch my.telegram.org. The api_id/api_hash
+// identify the *app*, not the account — logging in is still the user's own QR
+// scan. Someone who wants their own can still set them.
+const DEFAULT_API_ID = 2040;
+const DEFAULT_API_HASH = 'b18441a1ff607e10a989891a5462e627';
+
 // A deferred promise: resolve() it from elsewhere (the login code typed in UI).
 function defer() {
   let resolve;
@@ -68,9 +75,10 @@ class TelegramService extends EventEmitter {
     }
   }
 
-  configured() {
-    return !!(this.state.apiId && this.state.apiHash);
-  }
+  _apiId() { return Number(this.state.apiId || DEFAULT_API_ID); }
+  _apiHash() { return String(this.state.apiHash || DEFAULT_API_HASH); }
+  // always usable now: built-in creds mean the user only scans a QR
+  configured() { return true; }
 
   status() {
     return {
@@ -89,8 +97,8 @@ class TelegramService extends EventEmitter {
     const { StringSession } = require('telegram/sessions');
     return new TelegramClient(
       new StringSession(this.state.session || ''),
-      Number(this.state.apiId),
-      String(this.state.apiHash),
+      this._apiId(),
+      this._apiHash(),
       { connectionRetries: 5, deviceModel: 'Ruindows Live Messenger', appVersion: '8.5', useWSS: false }
     );
   }
@@ -100,7 +108,7 @@ class TelegramService extends EventEmitter {
    * true if already logged in, false if a fresh login is needed.
    */
   async resume() {
-    if (!this.configured() || !this.state.session) return false;
+    if (!this.state.session) return false;
     try {
       this.client = this._newClient();
       await this.client.connect();
@@ -185,7 +193,7 @@ class TelegramService extends EventEmitter {
     await this.client.connect();
 
     this.login.done = this.client.signInUserWithQrCode(
-      { apiId: Number(this.state.apiId), apiHash: String(this.state.apiHash) },
+      { apiId: this._apiId(), apiHash: this._apiHash() },
       {
         qrCode: async (code) => {
           const token = Buffer.from(code.token).toString('base64url');

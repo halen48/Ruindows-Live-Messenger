@@ -323,6 +323,9 @@ class AiService extends EventEmitter {
   login(provider) {
     if (!PROVIDERS[provider]) return;
     const win = this._win(provider);
+    clearTimeout(this.idleTimers?.get(provider));
+    // the page may have been blanked while idle: bring the site back first
+    if (!win.webContents.getURL().startsWith(new URL(PROVIDERS[provider].home).origin)) win.loadURL(PROVIDERS[provider].home).catch(() => {});
     win.show();
     win.focus();
   }

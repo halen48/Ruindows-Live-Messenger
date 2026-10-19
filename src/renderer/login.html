@@ -132,7 +132,10 @@
   const LOGIN_STATUS = {
     online: ['Online', 'frame-online'],
     busy: ['Ocupado', 'frame-busy'],
+    brb: ['Volto logo', 'frame-away'],
     away: ['Ausente', 'frame-away'],
+    phone: ['Ao telefone', 'frame-busy'],
+    lunch: ['Saí para almoçar', 'frame-away'],
     offline: ['Aparecer offline', 'frame-offline'],
   };
   const statusEl = document.getElementById('loginStatus');
@@ -145,8 +148,10 @@
   statusEl.addEventListener('click', (e) => {
     e.stopPropagation();
     const r = statusEl.getBoundingClientRect();
+    const icon = { online: 'online', busy: 'busy', brb: 'away', away: 'away', phone: 'busy', lunch: 'away', offline: 'invisible' };
     Menus.popup(Object.entries(LOGIN_STATUS).map(([key, [label]]) => ({
       label,
+      icon: `assets/wlm85/status16-${icon[key]}.png`,
       action: () => { window.msn.setStatus(key); showLoginStatus(key); },
     })), r.left, r.bottom + 2);
   });

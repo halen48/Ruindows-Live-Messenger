@@ -269,3 +269,8 @@ html[data-theme='dark'] { color-scheme: dark; background: #2b2d31; }
 html[data-theme='dark'] .banner img { filter: brightness(0.62) saturate(0.85); }
 /* native lists/dropdowns would otherwise be near black */
 html[data-theme='dark'] select { background-color: #34373c; color: #e4e6ea; }
+
+/* menus with icons (status menu): icon gutter, items without one line up */
+.xp-menu.has-icons .xp-menu-item { padding-left: 26px; position: relative; }
+.xp-menu-item .xp-menu-icon { position: absolute; left: 5px; top: 50%; margin-top: -8px; width: 16px; height: 16px; }
+.xp-menu-item.current { font-weight: bold; }

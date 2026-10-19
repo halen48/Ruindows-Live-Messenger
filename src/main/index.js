@@ -47,7 +47,8 @@ const chatWins = new Map(); // jid -> BrowserWindow
 
 // My MSN status is purely cosmetic: nothing is sent to WhatsApp. "busy"
 // (Ocupado) silences toasts and sounds, like Messenger did.
-const STATUS_LABEL = { online: 'Online', busy: 'Ocupado', away: 'Ausente', offline: 'Offline' };
+// the seven statuses of Messenger 8.5, in its menu order
+const STATUS_LABEL = { online: 'Online', busy: 'Ocupado', brb: 'Volto logo', away: 'Ausente', phone: 'Ao telefone', lunch: 'Saí para almoçar', offline: 'Offline' };
 
 // My nick, personal message, pictures and status, kept in a file so they
 // come back exactly as I left them. localStorage alone loses recent writes
@@ -421,7 +422,9 @@ async function startWhatsApp() {
 
 /** A new message (WhatsApp or an AI): tell every window, pop the chat, toast. */
 function deliverMessage(msg) {
-  broadcast('wa:message', msg);
+  // the chat window, when open, plays the sound; the buddy list only when it isn't
+  const open = chatWins.get(msg.chatJid);
+  broadcast('wa:message', { ...msg, windowOpen: !!open && !open.isDestroyed() });
   // optional: archived groups update quietly (no window, no toast)
   const quiet = settings.quietArchivedGroups && msg.chatJid?.endsWith('@g.us') && wa.chats?.get(msg.chatJid)?.archived;
   if (!msg.fromMe && !quiet) {

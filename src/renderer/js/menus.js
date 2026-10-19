@@ -21,15 +21,17 @@ const Menus = (() => {
   function buildDropdown(items, x, y) {
     closeDropdown();
     const menu = document.createElement('div');
-    menu.className = 'xp-menu';
+    menu.className = 'xp-menu' + (items.some((i) => i.icon) ? ' has-icons' : '');
     for (const item of items) {
       if (item.sep) {
         menu.appendChild(Object.assign(document.createElement('div'), { className: 'xp-menu-sep' }));
         continue;
       }
       const row = document.createElement('div');
-      row.className = 'xp-menu-item' + (item.disabled ? ' disabled' : '');
-      row.textContent = item.label;
+      row.className = 'xp-menu-item' + (item.disabled ? ' disabled' : '') + (item.current ? ' current' : '');
+      // optional 16px icon in the left gutter (the status menu has one per status)
+      if (item.icon) row.appendChild(Object.assign(document.createElement('img'), { className: 'xp-menu-icon', src: item.icon, alt: '' }));
+      row.appendChild(document.createTextNode(item.label));
       if (!item.disabled && item.action) {
         row.addEventListener('click', (e) => {
           e.stopPropagation();

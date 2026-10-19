@@ -383,6 +383,8 @@
   }
 
   // gold star in front of the Favoritos header
+  // little robot on the AI sections' headers, the way Favoritos has its star
+  const ROBOT_SVG = '<svg class="fav-star head" viewBox="0 0 12 12" width="12" height="12"><path d="M6 .8v1.6" stroke="#6b7f95" stroke-width=".9"/><circle cx="6" cy=".9" r=".8" fill="#e8463a"/><rect x="1.8" y="2.6" width="8.4" height="6.6" rx="1.6" fill="#cfdbe8" stroke="#56708c" stroke-width=".8"/><circle cx="4.3" cy="5.6" r="1.05" fill="#2f9be0"/><circle cx="7.7" cy="5.6" r="1.05" fill="#2f9be0"/><path d="M4.4 7.7h3.2" stroke="#56708c" stroke-width=".7"/><path d="M.9 4.7v2.4M11.1 4.7v2.4" stroke="#56708c" stroke-width=".9"/><path d="M3.6 9.2v1.6h4.8V9.2" fill="#b4c4d6" stroke="#56708c" stroke-width=".7"/></svg>';
   const STAR_SVG = '<svg class="fav-star" viewBox="0 0 12 12" width="11" height="11"><path d="M6 .6l1.6 3.4 3.7.4-2.8 2.5.8 3.7L6 8.7 2.7 10.6l.8-3.7L.7 4.4l3.7-.4z" fill="url(#favg)" stroke="#c98a00" stroke-width=".7"/></svg>';
 
   function row(chat) {
@@ -429,7 +431,8 @@
   }
 
   // me, at the top of the list, to message myself like WhatsApp's "Você"
-  const MY_ICON = { online: 'status16-online', busy: 'status16-busy', away: 'status16-away', offline: 'status16-invisible' };
+  // Volto logo and Saí para almoçar used the away icon in 8.5, Ao telefone the busy one
+  const MY_ICON = { online: 'status16-online', busy: 'status16-busy', brb: 'status16-away', away: 'status16-away', phone: 'status16-busy', lunch: 'status16-away', offline: 'status16-invisible' };
   function myRow(chat) {
     const div = document.createElement('div');
     div.className = 'contact-row' + (chat.jid === selectedJid ? ' selected' : '');
@@ -482,7 +485,7 @@
     const div = document.createElement('div');
     div.className = 'group-header';
     const arrow = collapsed.has(key) ? 'arrow-left' : 'arrow-down';
-    const star = key === 'pinned' ? STAR_SVG.replace('fav-star', 'fav-star head') : '';
+    const star = key === 'pinned' ? STAR_SVG.replace('fav-star', 'fav-star head') : key.startsWith('ai-') ? ROBOT_SVG : '';
     div.innerHTML = `<img src="assets/wlm85/${arrow}.png" alt="">${star}${label} <span class="count">(${count})</span>`;
     div.addEventListener('click', () => {
       collapsed.has(key) ? collapsed.delete(key) : collapsed.add(key);
@@ -555,14 +558,15 @@
   window.msn.aiRoster?.().then((r) => { aiRoster = r || []; if (lastRoster) render(lastRoster); });
   window.msn.onAiRoster?.((r) => { aiRoster = r || []; if (lastRoster) render(lastRoster); });
 
-  function aiRow(text, { icon = 'assets/wlm85/messenger-icon.png', title, dim, onOpen, jid, sub } = {}) {
+  function aiRow(text, { icon = 'assets/wlm85/messenger-icon.png', title, dim, onOpen, jid, sub, single } = {}) {
     const div = document.createElement('div');
     div.className = 'contact-row ai-row' + (jid && jid === selectedJid ? ' selected' : '');
     div.innerHTML = `<img src="${icon}"><span class="cname${dim ? ' status-suffix' : ''}">${escapeHtml(text)}` +
       `${sub ? ` <span class="personal-message">- ${escapeHtml(sub)}</span>` : ''}</span>`;
     if (title) div.title = title;
     div.addEventListener('dblclick', onOpen);
-    div.addEventListener('click', () => (jid ? selectRow(div, jid) : null));
+    // actions like "Entrar no ..." work with one click
+    div.addEventListener('click', () => (single ? onOpen() : jid ? selectRow(div, jid) : null));
     return div;
   }
 
@@ -588,7 +592,7 @@
       row.addEventListener('contextmenu', (e) => aiGroupMenu(g, e));
       listEl.appendChild(row);
     }
-    if (!q) listEl.appendChild(aiRow('Novo grupo de IAs...', { dim: true, onOpen: () => aiGroupDialog() }));
+    if (!q) listEl.appendChild(aiRow('Novo grupo de IAs...', { dim: true, single: true, onOpen: () => aiGroupDialog() }));
   }
 
   function aiGroupMenu(g, e) {
@@ -661,7 +665,7 @@
       if (!prov.checked) {
         listEl.appendChild(aiRow('Conectando...', { icon: 'assets/wlm85/status16-away.png', dim: true, onOpen: () => window.msn.aiLogin(prov.id) }));
       } else if (!prov.loggedIn) {
-        listEl.appendChild(aiRow(`Entrar no ${prov.name}...`, { icon: 'assets/wlm85/status16-invisible.png', title: 'Abre o site para você entrar com a sua conta', onOpen: () => window.msn.aiLogin(prov.id) }));
+        listEl.appendChild(aiRow(`Entrar no ${prov.name}...`, { icon: 'assets/wlm85/status16-invisible.png', title: 'Abre o site para você entrar com a sua conta', single: true, onOpen: () => window.msn.aiLogin(prov.id) }));
       } else {
         listEl.appendChild(aiRow('Nova conversa', {
           icon: 'assets/wlm85/status16-online.png',
@@ -843,10 +847,14 @@
   const MY_STATUS = {
     online: ['Online', 'frame-online'],
     busy: ['Ocupado', 'frame-busy'],
+    brb: ['Volto logo', 'frame-away'],
     away: ['Ausente', 'frame-away'],
+    phone: ['Ao telefone', 'frame-busy'],
+    lunch: ['Saí para almoçar', 'frame-away'],
     offline: ['Aparecer offline', 'frame-offline'],
   };
   let myStatus = 'online';
+  const MY_STATUS_ICON = (s) => `assets/wlm85/${MY_ICON[s] || MY_ICON.online}.png`;
   function showMyStatus(s) {
     if (!MY_STATUS[s]) return;
     myStatus = s;
@@ -865,19 +873,24 @@
     if (e.target.closest('.inline-edit')) return;
     e.stopPropagation();
     const r = myNameEl.getBoundingClientRect();
+    // laid out like Messenger 8.5's: the statuses with their icons, Sair,
+    // then the picture/name/message options and Opções
     Menus.popup([
       ...Object.entries(MY_STATUS).map(([s, [label]]) => ({
-        label: (s === myStatus ? '✓ ' : '') + label,
+        label,
+        icon: MY_STATUS_ICON(s),
+        current: s === myStatus,
         action: () => setMyStatus(s),
       })),
       { sep: true },
-      { label: 'Alterar nome de exibição...', action: editNick },
-      { label: 'Opções de status dos contatos...', action: () => Activity.showOptions(() => lastRoster && render(lastRoster)) },
-      { label: 'Alterar mensagem pessoal...', action: editPsm },
-      { label: 'Alterar foto de exibição...', action: changeDp },
-      ...(Profile.get().dp ? [{ label: 'Usar a foto do WhatsApp', action: () => Profile.set({ dp: null }) }] : []),
-      { sep: true },
       { label: 'Sair', action: () => window.msn.signOut() },
+      { sep: true },
+      { label: 'Alterar imagem de exibição...', action: changeDp },
+      ...(Profile.get().dp ? [{ label: 'Usar a foto do WhatsApp', action: () => Profile.set({ dp: null }) }] : []),
+      { label: 'Alterar nome de exibição...', action: editNick },
+      { label: 'Alterar mensagem pessoal...', action: editPsm },
+      { sep: true },
+      { label: 'Opções...', action: () => Activity.showOptions(() => lastRoster && render(lastRoster)) },
     ], r.left, r.bottom + 2);
   });
 
@@ -897,7 +910,9 @@
       { label: 'Chamar a atenção', action: () => selectedJid && window.msn.nudge(selectedJid) },
       { sep: true },
       ...Object.entries(MY_STATUS).map(([st, [label]]) => ({
-        label: (st === myStatus ? '✓ ' : '') + 'Meu status: ' + label,
+        label: 'Meu status: ' + label,
+        icon: MY_STATUS_ICON(st),
+        current: st === myStatus,
         action: () => setMyStatus(st),
       })),
       { label: 'Alterar nome de exibição...', action: editNick },
@@ -997,7 +1012,7 @@
     presenceByJid.set(jid + '#shown', nowOnline);
     if (lastRoster && !!wasShownOnline !== nowOnline) render(lastRoster);
   });
-  window.msn.onMessage((msg) => { if (!msg.fromMe) { try { Sounds.message(); } catch {} } });
+  window.msn.onMessage((msg) => { if (!msg.fromMe && !msg.windowOpen) { try { Sounds.message(); } catch {} } });
 
   function showSync(state) {
     document.getElementById('sync').hidden = !state;

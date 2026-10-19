@@ -288,7 +288,7 @@ class TelegramService extends EventEmitter {
         this.entities.set(id, ent);
         if (d.message) this.lastMsg.set(JID_PREFIX + id, d.message);
         const isGroup = !!(d.isGroup || d.isChannel);
-        const pres = isGroup ? { presence: 'available' } : this._presenceOf(ent);
+        const pres = isGroup ? { presence: 'available' } : this._presenceOf(ent, d.message);
         chats.push({
           jid: JID_PREFIX + id,
           source: 'telegram',
@@ -309,7 +309,7 @@ class TelegramService extends EventEmitter {
         const id = String(u.id?.value ?? u.id);
         if (listed.has(JID_PREFIX + id) || u.self || u.deleted) continue;
         this.entities.set(id, u);
-        const pres = this._presenceOf(u);
+        const pres = this._presenceOf(u, this.lastMsg.get(JID_PREFIX + id));
         chats.push({ jid: JID_PREFIX + id, source: 'telegram', name: this._entityName(u) || 'Telegram', isGroup: false, unread: 0, presence: pres.presence, lastIncoming: pres.lastIncoming, about: u.username ? `@${u.username}` : '', pinned: false, contactOnly: true });
       }
       this.chats = chats;
@@ -335,15 +335,32 @@ class TelegramService extends EventEmitter {
   // map Telegram's user "last seen" to the same presence the WhatsApp side
   // uses (available = online; otherwise a lastIncoming the UI turns into
   // online/away/offline by how long ago it was)
-  _presenceOf(ent) {
+  _presenceOf(ent, lastMsg) {
     const now = Math.floor(Date.now() / 1000);
     const st = ent?.status;
     const c = st?.className;
     if (c === 'UserStatusOnline') return { presence: 'available', lastIncoming: now };
     if (c === 'UserStatusOffline') return { presence: 'unavailable', lastIncoming: Number(st.wasOnline) || 0 };
-    if (c === 'UserStatusRecently') return { presence: 'unavailable', lastIncoming: now - 3600 }; // ~away
-    // last week / month / long time / hidden
-    return { presence: 'unavailable', lastIncoming: 0 };
+    // "recently" (they hide their last seen) says nothing about the time, so
+    // it can't mean Away for everybody: like WhatsApp, go by the last
+    // message they sent me; none known means Offline
+    // (bots and Telegram's own account, which greets me at every login, aren't people)
+    const robot = ent?.bot || ent?.support || String(ent?.id?.value ?? ent?.id) === '777000';
+    const theirs = !robot && lastMsg && !lastMsg.out && !lastMsg.action ? Number(lastMsg.date) || 0 : 0;
+    return { presence: 'unavailable', lastIncoming: theirs };
+  }
+
+  /** Someone's status changed (online now / went away): update the list live. */
+  _onStatus(userId, status) {
+    const jid = JID_PREFIX + userId;
+    const chat = this.chats.find((c) => c.jid === jid);
+    if (!chat) return;
+    const ent = this.entities.get(userId);
+    if (ent) ent.status = status;
+    const pres = this._presenceOf({ status }, this.lastMsg.get(jid));
+    if (chat.presence === pres.presence && chat.lastIncoming === pres.lastIncoming) return;
+    Object.assign(chat, pres);
+    this.emit('roster', this.getRoster());
   }
 
   _entityName(ent) {
@@ -415,7 +432,7 @@ class TelegramService extends EventEmitter {
       fromMe: !!m.out,
       text,
       isNudge: false,
-      timestamp: (m.date || 0) * 1000 || Date.now(),
+      timestamp: (m.date || 0) * 1000 || (m.out ? Date.now() : 0),
       senderName: name,
       // the group window reads the author from senderNick
       senderNick: name,
@@ -591,6 +608,11 @@ class TelegramService extends EventEmitter {
       // keep unread counts roughly fresh
       this.refresh();
     }, new NewMessage({}));
+    // live "online"/"last seen" changes
+    const { Raw } = require('telegram/events');
+    this.client.addEventHandler((u) => {
+      if (u?.className === 'UpdateUserStatus') this._onStatus(String(u.userId?.value ?? u.userId), u.status);
+    }, new Raw({}));
   }
 }
 

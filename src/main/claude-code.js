@@ -122,19 +122,15 @@ class ClaudeCode {
     return this.meta.get(id)?.title || 'Claude Code';
   }
 
-  /** The conversation's text, oldest first, as UI messages. */
-  getMessages(jid, id) {
-    const m = this.meta.get(id);
-    if (!m) return [];
-    const out = [];
-    for (const line of tailLines(m.file, HISTORY_TAIL)) {
+  _toUi(jid, lines, out = []) {
+    for (const line of lines) {
       if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"')) continue;
       const e = parse(line);
       if (!e || (e.type !== 'user' && e.type !== 'assistant')) continue;
       const text = e.type === 'user' ? userText(e) : assistantText(e);
       if (!text) continue;
       out.push({
-        id: `${jid}:${e.uuid || out.length}`,
+        id: `${jid}:${e.uuid || `${e.timestamp}-${out.length}`}`,
         chatJid: jid,
         fromMe: e.type === 'user',
         text,
@@ -143,13 +139,51 @@ class ClaudeCode {
         senderName: e.type === 'user' ? null : 'Claude Code',
       });
     }
-    return out.slice(-MAX_MESSAGES);
+    return out;
   }
 
-  /** Whether the session was written to very recently (probably open in a terminal). */
-  inUse(id) {
+  /** The conversation's text, oldest first, as UI messages. */
+  getMessages(jid, id) {
     const m = this.meta.get(id);
-    try { return Date.now() - fs.statSync(m.file).mtimeMs < 2 * 60 * 1000; } catch { return false; }
+    if (!m) return [];
+    return this._toUi(jid, tailLines(m.file, HISTORY_TAIL)).slice(-MAX_MESSAGES);
+  }
+
+  /**
+   * Follow a session while its window is open: whatever gets appended to the
+   * transcript (from the terminal or from here) arrives through onNew. Only
+   * the new bytes are read each time.
+   */
+  watch(jid, id, onNew) {
+    const m = this.meta.get(id);
+    if (!m || this.watchers?.has(id)) return;
+    if (!this.watchers) this.watchers = new Map();
+    let offset = fs.statSync(m.file).size;
+    let rest = '';
+    const check = (cur) => {
+      if (cur.size <= offset) { offset = Math.min(offset, cur.size); return; }
+      const fd = fs.openSync(m.file, 'r');
+      try {
+        const buf = Buffer.alloc(cur.size - offset);
+        fs.readSync(fd, buf, 0, buf.length, offset);
+        offset = cur.size;
+        const lines = (rest + buf.toString('utf8')).split('\n');
+        rest = lines.pop(); // incomplete last line waits for the next read
+        const msgs = this._toUi(jid, lines);
+        if (msgs.length) onNew(msgs);
+      } finally {
+        fs.closeSync(fd);
+      }
+    };
+    fs.watchFile(m.file, { interval: 1000 }, check);
+    this.watchers.set(id, m.file);
+  }
+
+  unwatch(id) {
+    const file = this.watchers?.get(id);
+    if (!file) return;
+    fs.unwatchFile(file);
+    this.watchers.delete(id);
   }
 
   _bin() {

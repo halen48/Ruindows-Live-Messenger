@@ -23,6 +23,33 @@ const { EventEmitter } = require('events');
 const CHROME_UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
 
+// Google refuses to sign in inside embedded browsers ("Esse navegador ou app
+// pode não ser seguro") but lets Firefox through. Its login requests go out
+// with a Firefox user agent; the page itself keeps the Chrome one, because
+// a Firefox navigator.userAgent next to Chrome's features makes it reload
+// forever.
+const FIREFOX_UA = 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
+
+/** One window, and the popups it opens (like "Continuar com o Google"), in the same session. */
+function useLoginFriendlyAgent(contents) {
+  contents.setUserAgent(CHROME_UA);
+  contents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, width: 520, height: 680 } }));
+  contents.on('did-create-window', (child) => useLoginFriendlyAgent(child.webContents));
+}
+
+const hookedSessions = new WeakSet();
+/** Firefox user agent on every request to Google's sign-in. */
+function hookSession(ses) {
+  if (hookedSessions.has(ses)) return;
+  hookedSessions.add(ses);
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*', 'https://*.accounts.google.com/*', 'https://accounts.youtube.com/*'] }, (details, cb) => {
+    details.requestHeaders['User-Agent'] = FIREFOX_UA;
+    // Chrome-only hints would give the Firefox identity away
+    for (const h of Object.keys(details.requestHeaders)) if (/^sec-ch-ua/i.test(h)) delete details.requestHeaders[h];
+    cb({ requestHeaders: details.requestHeaders });
+  });
+}
+
 // ---- page-side helpers (run inside the provider's page) ---------------------
 
 // Types text into a textarea or a contenteditable editor the way a user would.
@@ -265,7 +292,8 @@ class AiService extends EventEmitter {
       autoHideMenuBar: true,
       webPreferences: { partition: `persist:ai-${provider}`, backgroundThrottling: false },
     });
-    win.webContents.setUserAgent(CHROME_UA);
+    hookSession(win.webContents.session);
+    useLoginFriendlyAgent(win.webContents);
     // closing the login window only hides it; the session stays loaded
     win.on('close', (e) => {
       if (this.quitting) return;
@@ -399,10 +427,16 @@ class AiService extends EventEmitter {
     if (AiService.isCodeJid(jid)) {
       const id = jid.slice('ai:cc:'.length);
       if (!this.code.meta.has(id)) this.refreshCode();
-      const local = this.cache.get(jid) || [];
-      // replies I got here are also in the transcript; keep only ones not yet written there
-      const fromFile = this.code.getMessages(jid, id);
-      return [...fromFile, ...local.filter((m) => m.timestamp > (fromFile.at(-1)?.timestamp || 0))];
+      // from now on, what gets written to the session shows up live
+      this.code.watch(jid, id, (msgs) => {
+        for (const m of msgs) {
+          // my own message is already on screen (sent from this window)
+          if (m.fromMe && this._sentCode?.delete(`${jid}\n${m.text.trim()}`)) continue;
+          if (!m.fromMe) this._codeHeard = { ...(this._codeHeard || {}), [jid]: Date.now() };
+          this.emit('message', m);
+        }
+      });
+      return this.code.getMessages(jid, id);
     }
     const { provider, conv, p } = this._parse(jid);
     if (!p) return [];
@@ -482,19 +516,17 @@ class AiService extends EventEmitter {
     const id = jid.slice('ai:cc:'.length);
     const mine = { id: `${jid}:me-${Date.now()}`, chatJid: jid, fromMe: true, text, isNudge: false, timestamp: Date.now() };
     const note = (t) => ({ id: `${jid}:err-${Date.now()}`, chatJid: jid, fromMe: false, text: `⚠ ${t}`, isNudge: false, timestamp: Date.now(), senderName: 'Claude Code' });
-    if (this.code.inUse(id)) {
-      // two Claude Codes writing the same session would tangle it
-      setTimeout(() => this.emit('message', note('Essa sessão foi usada há menos de 2 minutos, deve estar aberta num terminal. Mande por lá ou espere ela ficar parada.')), 50);
-      return mine;
-    }
-    this.cache.set(jid, [...(this.cache.get(jid) || []), mine]);
+    if (!this._sentCode) this._sentCode = new Set();
+    this._sentCode.add(`${jid}\n${text.trim()}`);
     this.emit('presence', { jid, presence: 'composing' });
+    // the reply is written to the session file and arrives through the watcher;
+    // if it doesn't (written elsewhere), show what the command printed
+    const started = Date.now();
     this.code.send(id, text)
-      .then((answer) => {
-        const ui = { id: `${jid}:r-${Date.now()}`, chatJid: jid, fromMe: false, text: answer, isNudge: false, timestamp: Date.now(), senderName: 'Claude Code' };
-        this.cache.set(jid, [...(this.cache.get(jid) || []), ui]);
-        this.emit('message', ui);
-      })
+      .then((answer) => new Promise((r) => setTimeout(r, 2500)).then(() => {
+        if ((this._codeHeard?.[jid] || 0) >= started) return;
+        this.emit('message', { id: `${jid}:r-${Date.now()}`, chatJid: jid, fromMe: false, text: answer, isNudge: false, timestamp: Date.now(), senderName: 'Claude Code' });
+      }))
       .catch((e) => this.emit('message', note(`Não consegui falar com o Claude Code (${e?.message || e}).`)))
       .finally(() => this.emit('presence', { jid, presence: 'paused' }));
     return mine;
@@ -701,4 +733,4 @@ class AiService extends EventEmitter {
   }
 }
 
-module.exports = { AiService, PROVIDERS };
+module.exports = { AiService, PROVIDERS, hookSession, useLoginFriendlyAgent };

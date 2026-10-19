@@ -156,7 +156,11 @@ function openChatWindow(jid, { focus = true } = {}) {
   // incoming-message windows open inactive, like MSN's taskbar flash
   win.once('ready-to-show', () => (focus ? win.show() : win.showInactive()));
   attachScreenshot(win, 'chat');
-  win.on('closed', () => chatWins.delete(jid));
+  win.on('closed', () => {
+    chatWins.delete(jid);
+    // stop following a Claude Code session's file once its window is gone
+    if (AiService.isCodeJid(jid)) ai.code.unwatch(jid.slice('ai:cc:'.length));
+  });
   chatWins.set(jid, win);
   if (!AiService.isAiJid(jid)) {
     wa.subscribePresence(jid);

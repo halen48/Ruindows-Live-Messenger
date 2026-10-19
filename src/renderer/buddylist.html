@@ -400,9 +400,10 @@
   const NET = {
     whatsapp: 'WhatsApp', telegram: 'Telegram', instagram: 'Instagram', discord: 'Discord',
   };
-  function netIcon(source, isGroup) {
-    const net = NET[source] ? source : 'default';
-    return `assets/net/${isGroup ? 'group' : 'person'}-${net}.svg`;
+  function netIcon(source) {
+    // the real MSN buddy, recoloured per network; no source = WhatsApp (green)
+    const net = NET[source] ? source : 'whatsapp';
+    return `assets/net/buddy-${net}.svg`;
   }
   // status -> the corner-dot modifier class (online shows no dot: the coloured
   // buddy already reads as "there")
@@ -414,7 +415,7 @@
   }
   function contactPic(chat, status) {
     const title = NET[chat.source] || 'WhatsApp';
-    return `<span class="pic-wrap ${dotClass(status)}" title="${title}"><img src="${netIcon(chat.source, chat.isGroup)}" alt="${title}"><span class="status-dot"></span></span>`;
+    return `<span class="pic-wrap ${dotClass(status)}" title="${title}"><img src="${netIcon(chat.source)}" alt="${title}"><span class="status-dot"></span></span>`;
   }
 
   function row(chat) {

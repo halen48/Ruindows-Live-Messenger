@@ -85,6 +85,8 @@ class TelegramService extends EventEmitter {
   // always usable now: built-in creds mean the user only scans a QR
   configured() { return true; }
 
+  owns(jid) { return isTgJid(jid); }
+
   status() {
     return {
       configured: this.configured(),

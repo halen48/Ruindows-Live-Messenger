@@ -129,6 +129,8 @@
   #replyBar .rb-close:hover { color: #c00; }
   a.link { color: #0066cc; text-decoration: underline; cursor: pointer; word-break: break-all; }
   a.link:hover { color: #3399ff; }
+  .ig-preview { margin-top: 4px; padding: 4px 0 4px 8px; border-left: 3px solid #ff9a4d; max-width: 280px; }
+  .ig-preview .ig-cap { font-size: 11px; color: #666; margin-top: 3px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 
   /* pictures/files waiting to be sent (Ctrl+V, drop, "Enviar arquivo") */
   #attachBar { display: flex; gap: 6px; padding: 5px 6px; border: 1px solid #c5d3e3; border-bottom: 0; background: #eef3f9; overflow-x: auto; }
@@ -547,6 +549,7 @@
     el.querySelector('.quote')?.addEventListener('click', () => jumpTo(m.quote.id));
     if (m.quote?.media) fillQuotePic(el, m.quote);
     if (m.media) loadMedia(m, el.querySelector('.msg-text'));
+    else instagramPreview(el);
     const sender = el.querySelector('.sender[data-jid]');
     sender?.addEventListener('click', () => window.msn.openChat(sender.dataset.jid));
   }
@@ -672,6 +675,8 @@
     box.innerHTML = `<img src="${m.thumb || ''}" alt=""><div class="play"><span>▶</span></div>` +
       (m.duration ? `<div class="dur">${fmtDuration(m.duration)}</div>` : '');
     holder.prepend(box);
+    // Instagram's stills are fetched apart (their links expire)
+    if (!m.thumb && String(m.id).startsWith('ig:')) window.msn.igThumb?.(m.id).then((d) => { if (d) box.querySelector('img').src = d; });
     box.addEventListener('click', () => {
       box.querySelector('.play span').textContent = '…';
       window.msn.media(m.id).then((src) => {
@@ -722,6 +727,30 @@
       img.addEventListener('load', () => { historyEl.scrollTop = historyEl.scrollHeight; });
       placeholder.replaceWith(img);
     }).catch(() => {});
+  }
+
+  // a Reels/post link (from any network) gets the video right below it,
+  // through my Instagram session; nothing happens if I'm not logged in there
+  const IG_LINK = /instagram\.com\/(?:[\w.]+\/)?(?:reels?|p|tv)\/[\w-]{5,}/i;
+  async function instagramPreview(el) {
+    const a = [...el.querySelectorAll('a.link')].find((x) => IG_LINK.test(x.href));
+    if (!a || !window.msn.igLinkPreview) return;
+    const p = await window.msn.igLinkPreview(a.href);
+    if (!p) return;
+    const box = document.createElement('div');
+    box.className = 'ig-preview';
+    const cap = document.createElement('div');
+    cap.className = 'ig-cap';
+    cap.textContent = [p.user && `@${p.user}`, p.caption].filter(Boolean).join(': ');
+    box.append(cap);
+    el.querySelector('.msg-text').append(box);
+    if (p.media === 'video') loadVideo({ id: p.id, thumb: p.thumb, duration: p.duration }, box);
+    else {
+      const ph = document.createElement('div');
+      box.prepend(ph);
+      showPhoto({ id: p.id, media: 'image' }, ph);
+    }
+    historyEl.scrollTop = historyEl.scrollHeight;
   }
 
   function myDisplayName() {

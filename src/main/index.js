@@ -22,7 +22,8 @@ const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, scr
 const QRCode = require('qrcode');
 const { WhatsAppService } = require('./whatsapp');
 const { AiService } = require('./ai');
-const { TelegramService, isTgJid } = require('./telegram');
+const { TelegramService } = require('./telegram');
+const { InstagramService } = require('./instagram');
 const storage = require('./storage');
 
 const RENDERER = path.join(__dirname, '..', 'renderer');
@@ -43,6 +44,10 @@ app.commandLine.appendSwitch('disk-cache-dir', storage.paths.browserCache());
 
 let wa = null;
 let tg = null; // Telegram (personal account via gramjs); null until started
+let ig = null; // Instagram DMs (through instagram.com in a hidden window)
+// the other networks; each one answers for its own contacts (tg:..., ig:...)
+const nets = () => [tg, ig].filter(Boolean);
+const netFor = (jid) => nets().find((n) => n.owns(jid)) || null;
 let loginWin = null;
 let buddyWin = null;
 const chatWins = new Map(); // jid -> BrowserWindow
@@ -482,11 +487,10 @@ async function startWhatsApp() {
   await wa.start();
 }
 
-/** WhatsApp chats plus the Telegram ones, in a single roster for the list. */
+/** WhatsApp chats plus the other networks', in a single roster for the list. */
 function fullRoster() {
   const base = wa.getRoster();
-  const tgChats = tg ? tg.getRoster() : [];
-  return { ...base, chats: [...(base.chats || []), ...tgChats] };
+  return { ...base, chats: [...(base.chats || []), ...nets().flatMap((n) => n.getRoster())] };
 }
 
 /** A new message (WhatsApp, Telegram or an AI): tell every window, pop, toast. */
@@ -524,7 +528,7 @@ ipcMain.handle('assets:original', () => {
 
 ipcMain.handle('wa:getRoster', () => fullRoster());
 ipcMain.handle('wa:media', async (_e, id) => {
-  const file = isTgJid(id) ? await tg.getMedia(id) : await wa.getMedia?.(id);
+  const file = netFor(id) ? await netFor(id).getMedia(id) : await wa.getMedia?.(id);
   return file ? require('url').pathToFileURL(file).href : null;
 });
 ipcMain.handle('ui:getStatus', () => myStatus);
@@ -605,7 +609,7 @@ ipcMain.on('ui:profileSet', (e, profile) => {
   }
 });
 ipcMain.handle('wa:getSync', () => wa.getSync?.() || null);
-ipcMain.handle('wa:groupMembers', (_e, jid) => (isTgJid(jid) ? tg.groupMembers(jid) : AiService.isAiJid(jid) ? ai.groupMembers(jid) : wa.getGroupMembers?.(jid) || []));
+ipcMain.handle('wa:groupMembers', (_e, jid) => (netFor(jid) ? netFor(jid).groupMembers(jid) : AiService.isAiJid(jid) ? ai.groupMembers(jid) : wa.getGroupMembers?.(jid) || []));
 
 // ---- AI chat sites ---------------------------------------------------------------
 // every AI has its own section in the list, like Grupos and Offline; one can
@@ -644,9 +648,10 @@ ipcMain.on('ui:setStatus', (_e, status) => setMyStatus(status));
 // sync, so a chat window popped open by a message knows before it plays a sound
 ipcMain.on('ui:statusSync', (e) => { e.returnValue = myStatus; });
 ipcMain.handle('wa:getMessages', async (_e, jid) => {
-  if (isTgJid(jid)) {
-    const chat = tg.getRoster().find((c) => c.jid === jid);
-    return { jid, name: chat?.name || 'Telegram', me: wa.me, messages: await tg.getMessages(jid), isGroup: !!chat?.isGroup, presence: chat?.presence || 'available', lastIncoming: chat?.lastIncoming || null, source: 'telegram' };
+  const net = netFor(jid);
+  if (net) {
+    const chat = net.getRoster().find((c) => c.jid === jid);
+    return { jid, name: chat?.name || 'Contato', me: wa.me, messages: await net.getMessages(jid), isGroup: !!chat?.isGroup, presence: chat?.presence || 'available', lastIncoming: chat?.lastIncoming || null, source: chat?.source, about: chat?.about || '' };
   }
   if (AiService.isAiJid(jid)) {
     return { jid, name: ai.displayName(jid), me: wa.me, messages: await ai.getMessages(jid), presence: 'available', isAi: true };
@@ -665,20 +670,20 @@ const getMessagesPayload = (jid) => ({
   ...(wa.busyInfo?.(jid) || {}),
 });
 ipcMain.handle('wa:send', (_e, { jid, text, quotedId }) =>
-  isTgJid(jid) ? tg.send(jid, text) : AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
+  netFor(jid) ? netFor(jid).send(jid, text) : AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
 ipcMain.handle('wa:nudge', async (_e, jid) => {
   if (AiService.isAiJid(jid)) throw new Error('não disponível para IAs');
   const win = chatWins.get(jid);
   shakeWindow(win);
   return wa.sendNudge(jid);
 });
-ipcMain.handle('wa:typing', (_e, { jid, composing }) => (isTgJid(jid) ? tg.setTyping(jid, composing) : AiService.isAiJid(jid) ? null : wa.setTyping(jid, composing)));
+ipcMain.handle('wa:typing', (_e, { jid, composing }) => (netFor(jid) ? netFor(jid).setTyping(jid, composing) : AiService.isAiJid(jid) ? null : wa.setTyping(jid, composing)));
 ipcMain.handle('wa:setPresence', (_e, state) => wa.setMyPresence(state));
 // my own WhatsApp picture is also kept on disk so the sign-in screen can show
 // it before WhatsApp connects
 const MY_DP_FILE = path.join(USER_DATA, 'my-display-picture.jpg');
 ipcMain.handle('wa:avatar', async (_e, jid) => {
-  if (isTgJid(jid)) return tg.avatar(jid);
+  if (netFor(jid)) return netFor(jid).avatar(jid);
   if (AiService.isAiJid(jid)) return null;
   const url = await wa.getAvatar(jid);
   if (url && jid && jid === wa.me?.jid) {
@@ -694,13 +699,13 @@ ipcMain.handle('ui:cachedMyDp', () => {
   if (settings.profile?.dp) return settings.profile.dp;
   return fs.existsSync(MY_DP_FILE) ? require('url').pathToFileURL(MY_DP_FILE).href + '?t=' + fs.statSync(MY_DP_FILE).mtimeMs : null;
 });
-ipcMain.handle('wa:markRead', (_e, jid) => (isTgJid(jid) ? tg.markRead(jid) : AiService.isAiJid(jid) ? null : wa.markRead(jid)));
+ipcMain.handle('wa:markRead', (_e, jid) => (netFor(jid) ? netFor(jid).markRead(jid) : AiService.isAiJid(jid) ? null : wa.markRead(jid)));
 ipcMain.handle('wa:signOut', () => wa.signOut());
 
 ipcMain.handle('wa:sendImage', (_e, { jid, dataUrl }) => {
   const b64 = dataUrl.replace(/^data:image\/[\w+.-]+;base64,/, '');
   const buf = Buffer.from(b64, 'base64');
-  return isTgJid(jid) ? tg.sendImage(jid, buf) : wa.sendImage(jid, buf);
+  return netFor(jid) ? netFor(jid).sendImage(jid, buf) : wa.sendImage(jid, buf);
 });
 
 // a file pasted with Ctrl+V (copied in the file manager, or a non-image blob):
@@ -712,7 +717,7 @@ ipcMain.handle('wa:sendBlob', async (_e, { jid, name, dataUrl }) => {
   const file = path.join(dir, safe);
   fs.writeFileSync(file, Buffer.from(dataUrl.replace(/^data:[^,]*,/, ''), 'base64'));
   try {
-    return await (isTgJid(jid) ? tg.sendFile(jid, file) : wa.sendFile(jid, file));
+    return await (netFor(jid) ? netFor(jid).sendFile(jid, file) : wa.sendFile(jid, file));
   } finally {
     fs.rm(dir, { recursive: true, force: true }, () => {});
   }
@@ -725,7 +730,7 @@ ipcMain.handle('wa:sendFile', async (e, jid) => {
     properties: ['openFile'],
   });
   if (canceled || !filePaths.length) return null;
-  return isTgJid(jid) ? tg.sendFile(jid, filePaths[0]) : wa.sendFile(jid, filePaths[0]);
+  return netFor(jid) ? netFor(jid).sendFile(jid, filePaths[0]) : wa.sendFile(jid, filePaths[0]);
 });
 
 ipcMain.on('ui:openChat', (_e, jid) => openChatWindow(jid));
@@ -745,7 +750,7 @@ ipcMain.on('ui:openExternal', (_e, url) => {
   // downloaded chat photos/videos open in the system viewer
   if (/^file:\/\//.test(url) && wa?.mediaDir) {
     const file = require('url').fileURLToPath(url);
-    const dirs = [wa.mediaDir, tg?.mediaDir].filter(Boolean).map((d) => path.resolve(d) + path.sep);
+    const dirs = [wa.mediaDir, ...nets().map((n) => n.mediaDir)].filter(Boolean).map((d) => path.resolve(d) + path.sep);
     if (dirs.some((d) => file.startsWith(d))) shell.openPath(file);
   }
 });
@@ -786,7 +791,7 @@ ipcMain.handle('ui:clearMedia', () => {
   return storage.usage(wa.mediaDir);
 });
 ipcMain.handle('wa:mediaCached', (_e, id) => {
-  const file = isTgJid(id) ? tg.cachedMedia(id) : wa?.cachedMedia?.(id);
+  const file = netFor(id) ? netFor(id).cachedMedia(id) : wa?.cachedMedia?.(id);
   return file ? require('url').pathToFileURL(file).href : null;
 });
 
@@ -807,6 +812,19 @@ ipcMain.handle('tg:startQrLogin', (_e, opts) => tg.startQrLogin(opts || {}));
 ipcMain.handle('tg:submitCode', (_e, code) => tg.submitCode(code));
 ipcMain.handle('tg:submitPassword', (_e, pw) => tg.submitPassword(pw));
 ipcMain.handle('tg:logout', () => tg.logout());
+
+// ---- Instagram ---------------------------------------------------------------
+// DMs through instagram.com itself (no password stored: I log in on the site).
+ig = new InstagramService({ mediaDir: path.join(USER_DATA, 'instagram', 'media') });
+ig.on('message', (msg) => deliverMessage(msg));
+ig.on('roster', () => broadcast('wa:roster', fullRoster()));
+ig.on('login', (st) => broadcast('ig:login', st));
+ipcMain.handle('ig:status', () => ig.status());
+ipcMain.handle('ig:login', () => ig.login());
+ipcMain.handle('ig:logout', () => ig.logout());
+// reel/post links in any chat: still + video through my Instagram session
+ipcMain.handle('ig:linkPreview', (_e, url) => ig.linkPreview(url).catch(() => null));
+ipcMain.handle('ig:thumb', (_e, id) => ig.thumb(id).catch(() => null));
 
 // ---- App lifecycle ------------------------------------------------------
 
@@ -835,6 +853,7 @@ app.whenReady().then(async () => {
   // resume a saved Telegram session quietly; if it needs a fresh login the
   // user starts one from the add-contact menu
   if (!process.env.MSN_DEMO) tg.resume().catch(() => {});
+  if (!process.env.MSN_DEMO) ig.resume().catch(() => {});
   await startWhatsApp();
 });
 

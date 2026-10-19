@@ -397,7 +397,7 @@
   function contactPic(chat, status) {
     const src = chat.source;
     // OTHER social networks: the SAME MSN icon, hue-shifted to the network's
-    // colour (blue Telegram, pink Instagram, purple Discord). Same status rule
+    // colour (blue Telegram, papaya Instagram, purple Discord). Same status rule
     // as WhatsApp: online / away / busy / offline. Offline is grey for all.
     if (src && src !== 'whatsapp' && NET[src]) {
       let img;
@@ -1053,9 +1053,12 @@
     const on = new Set(aiRoster.map((p) => p.id));
     const ais = providers.filter((p) => !on.has(p.id));
     const tg = await window.msn.tgStatus();
+    const ig = await window.msn.igStatus();
     Menus.popup([
       { label: 'Adicionar contato do WhatsApp...', action: addPhoneContact },
       { label: tg.loggedIn ? `Sair do Telegram (${tg.name || 'conectado'})` : 'Entrar no Telegram...', action: () => (tg.loggedIn ? window.msn.tgLogout() : telegramLoginDialog()) },
+      // Instagram: its own site opens; once I'm in, the window closes by itself
+      { label: ig.loggedIn ? `Sair do Instagram (${ig.name || 'conectado'})` : 'Entrar no Instagram...', action: () => (ig.loggedIn ? window.msn.igLogout() : window.msn.igLogin()) },
       ...(ais.length ? [{ sep: true }] : []),
       ...ais.map((p) => ({ label: `Mostrar ${p.name} na lista`, action: () => setAiEnabled([...on, p.id]) })),
     ], r.left, r.bottom + 2);

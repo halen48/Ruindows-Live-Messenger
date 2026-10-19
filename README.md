@@ -153,7 +153,15 @@ Telegram azul...), que é como você diferencia o mesmo "João" em três redes.
   fica **criptografada no seu PC** e nunca sai dele. Quem quiser usa as
   próprias credenciais ou telefone/SMS em "Avançado". Os chats entram na lista
   com o boneco azul.
-- 💭 **Discord, Instagram, etc.** — se a preguiça falar mais alto.
+- ✅ **Instagram** — DMs da conta pessoal, com o boneco laranja-papaia.
+  "Entrar no Instagram..." abre o **próprio site** do Instagram: você loga lá
+  e a janela fecha sozinha. O app nunca vê nem guarda a senha; ele conversa
+  com o site pelas mesmas chamadas que o site usa. Reels compartilhados
+  aparecem com o vídeo, e **link de Reels em qualquer conversa** (zap,
+  Telegram...) ganha um preview com o vídeo. Mensagens novas chegam em até
+  ~20 s (o app consulta a caixa de entrada; o site usa um canal próprio).
+  Enviar foto pelo Instagram ainda não funciona.
+- 💭 **Discord, etc.** — se a preguiça falar mais alto.
 
 ### Mídia e espaço em disco
 ☰ > **Opções de mídia...**

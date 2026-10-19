@@ -153,8 +153,15 @@ function emojiText(s) {
   return html + escapeHtmlText(String(s).slice(last));
 }
 
-// links: http(s)://... or www....
-const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"]+/gi;
+// links: http(s)://..., www...., or a bare domain with a real ending
+// ("uol.com.br", "github.com/x"). The list keeps "arquivo.txt" / "node.js" /
+// "v1.2" as text; the lookbehind keeps e-mails ("a@gmail.com") as text.
+const TLDS = 'com|net|org|br|io|dev|app|gov|edu|mil|info|biz|me|tv|co|ai|gg|xyz|ly|us|uk|pt|de|fr|es|it|nl|be|ch|eu|jp|kr|cn|ru|ca|au|mx|ar|cl|uy|py|pe|link|site|online|store|shop|tech|blog|news|live|so|to|fm|art|wiki|cloud|page|social|games?|chat';
+const URL_RE = new RegExp(
+  '\\b(?:https?:\\/\\/|www\\.)[^\\s<>"]+' +
+  `|(?<![@\\w.\\/-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${TLDS})(?![\\w-])(?::\\d+)?(?:[\\/?#][^\\s<>"]*)?`,
+  'gi'
+);
 // "veja x.com." / "(x.com)": trailing punctuation isn't part of the link, but
 // a ")" closing a "(" inside it is (Wikipedia's "..._(software)")
 function trimUrl(url) {
@@ -180,7 +187,7 @@ function messageHtml(text) {
   });
   return formatHtml(text).replace(/\u0000(\d+)\u0000/g, (_, i) => {
     const url = links[i];
-    const href = /^www\./i.test(url) ? `https://${url}` : url;
+    const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
     return `<a class="link" href="${escAttr(href)}" title="${escAttr(href)}">${escAttr(url)}</a>`;
   });
 }

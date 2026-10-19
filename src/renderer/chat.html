@@ -1011,6 +1011,43 @@
     window.msn.sendFile(jid).then((m) => m && appendMessage(m));
   }
 
+  // Ctrl+V a print/foto/arquivo: images go as photos, anything else as a file.
+  // Plain text keeps pasting into the box as usual.
+  const readAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+  async function sendPastedFiles(files) {
+    if (isAi) return unavailable('Enviar arquivos');
+    for (const file of files) {
+      try {
+        const dataUrl = await readAsDataUrl(file);
+        const m = file.type.startsWith('image/')
+          ? await window.msn.sendImage(jid, dataUrl)
+          : await window.msn.sendBlob(jid, file.name, dataUrl);
+        if (m) appendMessage(m);
+      } catch (e) {
+        console.error('paste send failed', e);
+      }
+    }
+  }
+  document.addEventListener('paste', (e) => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (!files.length) return; // text: default paste
+    e.preventDefault();
+    sendPastedFiles(files);
+  });
+  // dropping files on the window sends them the same way
+  document.addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+  document.addEventListener('drop', (e) => {
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.length) return;
+    e.preventDefault();
+    sendPastedFiles(files);
+  });
+
   sendBtn.addEventListener('click', send);
   document.getElementById('sendFilesBtn').addEventListener('click', sendFile);
   document.getElementById('nudgeBtn').addEventListener('click', sendNudge);

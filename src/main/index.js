@@ -696,8 +696,24 @@ ipcMain.handle('wa:markRead', (_e, jid) => (isTgJid(jid) ? tg.markRead(jid) : Ai
 ipcMain.handle('wa:signOut', () => wa.signOut());
 
 ipcMain.handle('wa:sendImage', (_e, { jid, dataUrl }) => {
-  const b64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  return wa.sendImage(jid, Buffer.from(b64, 'base64'));
+  const b64 = dataUrl.replace(/^data:image\/[\w+.-]+;base64,/, '');
+  const buf = Buffer.from(b64, 'base64');
+  return isTgJid(jid) ? tg.sendImage(jid, buf) : wa.sendImage(jid, buf);
+});
+
+// a file pasted with Ctrl+V (copied in the file manager, or a non-image blob):
+// it only exists as bytes in the renderer, so park it in a temp file named
+// like the original and send it through the normal file path
+ipcMain.handle('wa:sendBlob', async (_e, { jid, name, dataUrl }) => {
+  const safe = path.basename(String(name || 'arquivo')).replace(/[^\w.\- ()]/g, '_') || 'arquivo';
+  const dir = fs.mkdtempSync(path.join(app.getPath('temp'), 'whatsmsn-paste-'));
+  const file = path.join(dir, safe);
+  fs.writeFileSync(file, Buffer.from(dataUrl.replace(/^data:[^,]*,/, ''), 'base64'));
+  try {
+    return await (isTgJid(jid) ? tg.sendFile(jid, file) : wa.sendFile(jid, file));
+  } finally {
+    fs.rm(dir, { recursive: true, force: true }, () => {});
+  }
 });
 
 ipcMain.handle('wa:sendFile', async (e, jid) => {
@@ -707,7 +723,7 @@ ipcMain.handle('wa:sendFile', async (e, jid) => {
     properties: ['openFile'],
   });
   if (canceled || !filePaths.length) return null;
-  return wa.sendFile(jid, filePaths[0]);
+  return isTgJid(jid) ? tg.sendFile(jid, filePaths[0]) : wa.sendFile(jid, filePaths[0]);
 });
 
 ipcMain.on('ui:openChat', (_e, jid) => openChatWindow(jid));

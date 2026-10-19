@@ -328,8 +328,23 @@ class TelegramService extends EventEmitter {
 
   // ---- messages -------------------------------------------------------------
 
-  _toUi(jid, m) {
-    const text = m.message || m.text || '';
+  // what a media message shows as text (photos/videos aren't downloaded yet)
+  _mediaLabel(m) {
+    if (!m.media) return '';
+    if (m.photo) return '\u{1F4F7} Foto';
+    if (m.video || m.gif) return '\u{1F3AC} Vídeo';
+    if (m.voice || m.audio) return '\u{1F3B5} Áudio';
+    if (m.sticker) return 'Figurinha';
+    const name = m.file?.name;
+    return name ? `\u{1F4CE} ${name}` : '\u{1F4CE} Arquivo';
+  }
+
+  /** sender: the resolved author (gramjs entity), for group "X diz:". */
+  _toUi(jid, m, sender = m.sender) {
+    const caption = m.message || '';
+    const label = this._mediaLabel(m);
+    const text = caption && label ? `${label}\n${caption}` : caption || label;
+    const name = m.out ? null : (this._entityName(sender) || undefined);
     return {
       id: `${jid}:${m.id}`,
       chatJid: jid,
@@ -337,8 +352,18 @@ class TelegramService extends EventEmitter {
       text,
       isNudge: false,
       timestamp: (m.date || 0) * 1000 || Date.now(),
-      senderName: m.out ? null : (this._entityName(m.sender) || undefined),
+      senderName: name,
+      // the group window reads the author from senderNick
+      senderNick: name,
+      senderJid: sender?.id != null ? `${JID_PREFIX}${String(sender.id?.value ?? sender.id)}` : undefined,
     };
+  }
+
+  // resolve the author when gramjs didn't attach it (cached, so cheap)
+  async _withSender(jid, m) {
+    let sender = m.sender;
+    if (!sender && !m.out) { try { sender = await m.getSender(); } catch {} }
+    return this._toUi(jid, m, sender);
   }
 
   async getMessages(jid, limit = 40) {
@@ -347,7 +372,8 @@ class TelegramService extends EventEmitter {
       const ent = await this._entity(jid);
       const msgs = await this.client.getMessages(ent, { limit });
       // gramjs returns newest first; the UI wants oldest first
-      return [...msgs].reverse().map((m) => this._toUi(jid, m)).filter((m) => m.text);
+      const ui = await Promise.all([...msgs].reverse().map((m) => this._withSender(jid, m)));
+      return ui.filter((m) => m.text);
     } catch (e) {
       if (process.env.MSN_DEBUG) console.log('[tg] history failed:', e?.message);
       return [];
@@ -357,6 +383,23 @@ class TelegramService extends EventEmitter {
   async send(jid, text) {
     const ent = await this._entity(jid);
     const sent = await this.client.sendMessage(ent, { message: text });
+    return this._toUi(jid, sent);
+  }
+
+  /** Send a picture (pasted/drawn) as a Telegram photo. */
+  async sendImage(jid, buffer) {
+    const { CustomFile } = require('telegram/client/uploads');
+    const ent = await this._entity(jid);
+    const file = new CustomFile('imagem.png', buffer.length, '', buffer);
+    const sent = await this.client.sendFile(ent, { file });
+    return this._toUi(jid, sent);
+  }
+
+  /** Send a file from disk; pictures/videos go as media, the rest as document. */
+  async sendFile(jid, filePath) {
+    const ent = await this._entity(jid);
+    const media = /\.(png|jpe?g|gif|webp|mp4|mov|webm)$/i.test(filePath);
+    const sent = await this.client.sendFile(ent, { file: filePath, forceDocument: !media });
     return this._toUi(jid, sent);
   }
 
@@ -409,14 +452,16 @@ class TelegramService extends EventEmitter {
 
   _listen() {
     const { NewMessage } = require('telegram/events');
-    this.client.addEventHandler((event) => {
+    const { utils } = require('telegram');
+    this.client.addEventHandler(async (event) => {
       const m = event.message;
-      if (!m) return;
-      const peer = m.peerId;
-      const id = String(peer?.userId?.value ?? peer?.chatId?.value ?? peer?.channelId?.value ?? m.chatId?.value ?? m.chatId ?? '');
-      if (!id) return;
+      if (!m?.peerId) return;
+      // the MARKED id (groups negative, channels -100...), same as the
+      // dialog ids the roster uses; the raw chatId would open a ghost chat
+      let id;
+      try { id = String(utils.getPeerId(m.peerId)); } catch { return; }
       const jid = JID_PREFIX + id;
-      const ui = this._toUi(jid, m);
+      const ui = await this._withSender(jid, m);
       if (ui.text) this.emit('message', ui);
       // keep unread counts roughly fresh
       this.refresh();

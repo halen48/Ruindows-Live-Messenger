@@ -20,6 +20,10 @@ const { ClaudeCode } = require('./claude-code');
 const { BrowserWindow } = require('electron');
 const { EventEmitter } = require('events');
 
+// all AI sites share one browser session, so signing in to Google (or any
+// account) once counts for every site that offers it
+const AI_PARTITION = 'persist:ai';
+
 // a plain Chrome identity (no "Electron"), with the version this build really
 // runs: bot checks compare it with the browser's own client hints
 const CHROME_PLATFORM = process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'X11; Linux x86_64';
@@ -296,7 +300,7 @@ class AiService extends EventEmitter {
       height: 800,
       title: `Entrar no ${p.name}`,
       autoHideMenuBar: true,
-      webPreferences: { partition: `persist:ai-${provider}`, backgroundThrottling: false },
+      webPreferences: { partition: AI_PARTITION, backgroundThrottling: false },
     });
     hookSession(win.webContents.session);
     useLoginFriendlyAgent(win.webContents);

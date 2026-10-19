@@ -314,19 +314,45 @@ const TRAY_FILE = {
   lunch: path.join(WLM, 'status16-away.png'),
   offline: path.join(WLM, 'status16-invisible.png'),
 };
+const TRAY_SIZE = process.platform === 'linux' ? 22 : 16;
 function trayStatusImage(state) {
   if (trayCache.has(state)) return trayCache.get(state);
   const file = TRAY_FILE[state] || TRAY_FILE.online;
   let img = nativeImage.createFromPath(file);
   if (img.isEmpty()) img = fallbackTrayImage();
+  img = img.resize({ width: TRAY_SIZE, height: TRAY_SIZE, quality: 'best' });
   trayCache.set(state, img);
   return img;
 }
+// Linux app-indicators don't reliably repaint from an in-memory image; they
+// pick up the change when setImage gets a file PATH. So write each state's
+// resized icon to disk once and point the tray at the file. Elsewhere the
+// nativeImage is fine.
+const trayFiles = new Map();
+function trayStatusPath(state) {
+  if (trayFiles.has(state)) return trayFiles.get(state);
+  const dir = path.join(USER_DATA, 'tray');
+  const out = path.join(dir, `${state}.png`);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(out, trayStatusImage(state).toPNG());
+    trayFiles.set(state, out);
+    return out;
+  } catch {
+    return null;
+  }
+}
 function setTrayStatus(state) {
   if (!tray || tray.isDestroyed?.()) return;
-  const img = trayStatusImage(state === 'connecting' ? 'connecting' : state);
-  const traySize = process.platform === 'linux' ? 22 : 16;
-  try { tray.setImage(img.resize({ width: traySize, height: traySize, quality: 'best' })); } catch {}
+  const key = state === 'connecting' ? 'connecting' : (TRAY_FILE[state] ? state : 'online');
+  try {
+    if (process.platform === 'linux') {
+      const p = trayStatusPath(key);
+      tray.setImage(p || trayStatusImage(key));
+    } else {
+      tray.setImage(trayStatusImage(key));
+    }
+  } catch { /* some Linux setups have no usable tray */ }
 }
 
 async function setupTray() {
@@ -336,9 +362,8 @@ async function setupTray() {
   if (!image || image.isEmpty()) image = fallbackTrayImage();
 
   try {
-    // panel icons are 22px on Linux, 16px in the Windows tray and the macOS menu bar
-    const traySize = process.platform === 'linux' ? 22 : 16;
-    tray = new Tray(image.resize({ width: traySize, height: traySize, quality: 'best' }));
+    // the image is already sized to TRAY_SIZE (22px Linux, 16px elsewhere)
+    tray = new Tray(process.platform === 'linux' ? (trayStatusPath('connecting') || image) : image);
     tray.setToolTip('Ruindows Live Messenger - Online');
     tray.setContextMenu(
       Menu.buildFromTemplate([

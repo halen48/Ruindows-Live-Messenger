@@ -203,6 +203,11 @@
   .contact-row:hover { background: linear-gradient(180deg, #fafdfe, #e8f5fd); border-color: #b8e2fb; }
   .contact-row.selected { background: linear-gradient(180deg, #f1f8fd, #d5effc); border-color: #84acdd; }
   .contact-row img { flex: none; width: 16px; height: 16px; }
+  /* small network badge (WhatsApp/Telegram/...) so the same person on
+     different networks is told apart at a glance */
+  .pic-wrap { position: relative; flex: none; width: 16px; height: 16px; display: inline-block; }
+  .pic-wrap .net-badge { position: absolute; right: -4px; bottom: -4px; width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 1.5px #fff; }
+  html[data-theme='dark'] .pic-wrap .net-badge { box-shadow: 0 0 0 1.5px #2b2d31; }
   .contact-row .cname { overflow: hidden; text-overflow: ellipsis; color: #1e1e1e; }
   .contact-row .status-suffix { color: #6d6d6d; }
   .contact-row .unread { color: #d35400; font-weight: 600; }
@@ -387,6 +392,17 @@
   const ROBOT_SVG = '<svg class="fav-star head" viewBox="0 0 12 12" width="12" height="12"><path d="M6 .8v1.6" stroke="#6b7f95" stroke-width=".9"/><circle cx="6" cy=".9" r=".8" fill="#e8463a"/><rect x="1.8" y="2.6" width="8.4" height="6.6" rx="1.6" fill="#cfdbe8" stroke="#56708c" stroke-width=".8"/><circle cx="4.3" cy="5.6" r="1.05" fill="#2f9be0"/><circle cx="7.7" cy="5.6" r="1.05" fill="#2f9be0"/><path d="M4.4 7.7h3.2" stroke="#56708c" stroke-width=".7"/><path d="M.9 4.7v2.4M11.1 4.7v2.4" stroke="#56708c" stroke-width=".9"/><path d="M3.6 9.2v1.6h4.8V9.2" fill="#b4c4d6" stroke="#56708c" stroke-width=".7"/></svg>';
   const STAR_SVG = '<svg class="fav-star" viewBox="0 0 12 12" width="11" height="11"><path d="M6 .6l1.6 3.4 3.7.4-2.8 2.5.8 3.7L6 8.7 2.7 10.6l.8-3.7L.7 4.4l3.7-.4z" fill="url(#favg)" stroke="#c98a00" stroke-width=".7"/></svg>';
 
+  // which network a chat comes from, and its badge
+  const NET_BADGE = {
+    whatsapp: 'assets/net/whatsapp.svg',
+    telegram: 'assets/net/telegram.svg',
+  };
+  function picWithBadge(img, source) {
+    const badge = NET_BADGE[source || 'whatsapp'];
+    const b = badge ? `<img class="net-badge" src="${badge}" alt="${source || 'whatsapp'}" title="${source || 'WhatsApp'}">` : '';
+    return `<span class="pic-wrap"><img src="${img}">${b}</span>`;
+  }
+
   function row(chat) {
     if (chat.isMe) return myRow(chat);
     const div = document.createElement('div');
@@ -407,7 +423,7 @@
       ? ` <span class="personal-message">- ${messageHtml(truncate(chat.about, 48))}</span>`
       : '';
     const img = chat.isGroup ? 'assets/wlm85/messenger-icon.png' : icon(status);
-    div.innerHTML = `<img src="${img}"><span class="cname">${escapeHtml(chat.name)}${suffix}${unread}${psm}</span>`;
+    div.innerHTML = `${picWithBadge(img, chat.source)}<span class="cname">${escapeHtml(chat.name)}${suffix}${unread}${psm}</span>`;
     div.addEventListener('dblclick', () => window.msn.openChat(chat.jid));
     div.addEventListener('click', () => selectRow(div, chat.jid));
     div.addEventListener('contextmenu', (e) => {

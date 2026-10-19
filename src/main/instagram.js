@@ -61,6 +61,40 @@ class InstagramService extends EventEmitter {
     this.q = {}; // friendly name -> captured request body
     this.me = null; // { fbid, name }
     this.sendQueue = Promise.resolve();
+    this.following = []; // people I follow: the "contacts" of Instagram
+    this.userThreads = new Map(); // username -> thread id, for 1:1 conversations
+  }
+
+  // people I follow with no conversation yet are listed as ig:user:<username>
+  _userOf(jid) { return jid.startsWith(`${JID_PREFIX}user:`) ? jid.slice(JID_PREFIX.length + 5) : null; }
+  /** The conversation id for a jid, if there is one (ig:user:x only after a first message). */
+  _threadId(jid) {
+    const user = this._userOf(jid);
+    return user ? this.userThreads.get(user.toLowerCase()) || null : this._idOf(jid);
+  }
+
+  /** Everyone I follow (page by page, gently), again every 6 h. */
+  async _loadFollowing() {
+    if (this.followingAt && Date.now() - this.followingAt < 6 * 3600e3) return;
+    this.followingAt = Date.now();
+    const pk = (await this.ses.cookies.get({ url: ORIGIN, name: 'ds_user_id' }))[0]?.value;
+    if (!pk) return;
+    const all = [];
+    let next = '';
+    for (let page = 0; page < 15; page++) {
+      let r;
+      try {
+        r = JSON.parse(await this.win.webContents.executeJavaScript(
+          `fetch('/api/v1/friendships/${pk}/following/?count=200${next ? `&max_id=${next}` : ''}', { headers: { 'X-IG-App-ID': '${APP_ID}', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || '' }, credentials: 'include' }).then((r) => r.text())`,
+          true
+        ));
+      } catch { break; }
+      for (const u of r.users || []) all.push({ pk: String(u.pk), username: u.username, name: u.full_name || u.username, pic: u.profile_pic_url });
+      next = r.next_max_id;
+      if (!next) break;
+      await sleep(1500);
+    }
+    if (all.length) { this.following = all; this.refresh(); }
   }
 
   owns(jid) { return isIgJid(jid); }
@@ -238,6 +272,7 @@ class InstagramService extends EventEmitter {
       // no "active now" on the web for this account: the same rule WhatsApp
       // uses without presence, by when they last wrote
       const lastTheirs = theirs.length ? Math.floor(Number(theirs[theirs.length - 1].timestamp_ms) / 1000) : 0;
+      if (!t.is_group && other?.username) this.userThreads.set(other.username.toLowerCase(), id);
       chats.push({
         jid,
         source: 'instagram',
@@ -261,8 +296,13 @@ class InstagramService extends EventEmitter {
         if (ui.text || ui.media) this.emit('message', ui);
       }
     }
+    for (const u of this.following) {
+      if (this.userThreads.has(u.username.toLowerCase())) continue;
+      chats.push({ jid: `${JID_PREFIX}user:${u.username}`, source: 'instagram', name: u.name, isGroup: false, unread: 0, presence: 'unavailable', lastIncoming: null, about: `@${u.username}`, pinned: false, contactOnly: true });
+    }
     this.chats = chats;
     this.emit('roster', this.getRoster());
+    if (first) setTimeout(() => this._loadFollowing().catch(() => {}), 5000);
   }
 
   getRoster() { return this.chats; }
@@ -355,7 +395,7 @@ class InstagramService extends EventEmitter {
 
   async getMessages(jid) {
     if (!this.me) return [];
-    const t = this.threads.get(this._idOf(jid));
+    const t = this.threads.get(this._threadId(jid));
     if (!t) return [];
     try {
       const data = await this._gql('IGDThreadDetailQuery', { thread_fbid: String(t.thread_fbid) });
@@ -376,8 +416,8 @@ class InstagramService extends EventEmitter {
     const user = String(username || '').trim().replace(/^@/, '').replace(/[^\w.]/g, '');
     if (!user) throw new Error('nome de usuário vazio');
     if (!this.me) throw new Error('entre no Instagram primeiro');
-    const known = this.chats.find((c) => c.about.toLowerCase() === `@${user.toLowerCase()}`);
-    if (known) return known.jid;
+    const known = this.userThreads.get(user.toLowerCase());
+    if (known) return JID_PREFIX + known;
     const win = await this._go(`https://ig.me/m/${user}`);
     let id = null;
     for (let i = 0; i < 40 && !id; i++) {
@@ -385,6 +425,7 @@ class InstagramService extends EventEmitter {
       if (!id) await sleep(250);
     }
     if (!id) throw new Error(`não achei @${user} no Instagram`);
+    this.userThreads.set(user.toLowerCase(), id);
     // shows up in the list right away, filled in properly by the next refresh
     if (!this.chats.some((c) => c.jid === JID_PREFIX + id)) {
       this.chats.push({ jid: JID_PREFIX + id, source: 'instagram', name: `@${user}`, isGroup: false, unread: 0, presence: 'unavailable', lastIncoming: 0, about: `@${user}`, pinned: false });
@@ -405,7 +446,9 @@ class InstagramService extends EventEmitter {
   }
 
   async _send(jid, text) {
-    const id = this._idOf(jid);
+    // someone I follow with no conversation yet: open one first
+    let id = this._threadId(jid);
+    if (!id) id = this._idOf(await this.startChat(this._userOf(jid)));
     const win = await this._go(`${ORIGIN}/direct/t/${id}/`);
     const BOX = 'div[contenteditable="true"][role="textbox"], div[contenteditable="true"][aria-label]';
     const ok = await win.webContents.executeJavaScript(`(async () => {
@@ -440,7 +483,7 @@ class InstagramService extends EventEmitter {
   async setTyping() {}
 
   async groupMembers(jid) {
-    const t = this.threads.get(this._idOf(jid));
+    const t = this.threads.get(this._threadId(jid) || '');
     return (t?.users || []).map((u) => ({
       jid: `${JID_PREFIX}u${u.id}`,
       nick: u.full_name || u.username,
@@ -469,8 +512,9 @@ class InstagramService extends EventEmitter {
 
   async avatar(jid) {
     if (this.avatars.has(jid)) return this.avatars.get(jid);
-    const t = this.threads.get(this._idOf(jid));
-    const url = t?.is_group ? t?.thread_image_url : t?.users?.[0]?.profile_pic_url;
+    const user = this._userOf(jid);
+    const t = this.threads.get(this._threadId(jid) || '');
+    const url = user ? this.following.find((u) => u.username === user)?.pic : t?.is_group ? t?.thread_image_url : t?.users?.[0]?.profile_pic_url;
     const data = typeof url === 'string' ? await this._dataUrl(url) : null;
     if (data) this.avatars.set(jid, data);
     return data;

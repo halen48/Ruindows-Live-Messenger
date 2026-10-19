@@ -870,13 +870,16 @@ app.whenReady().then(async () => {
   // when was the app last online (before this run): Telegram/Instagram
   // conversations with unread messages newer than that pop their windows,
   // like MSN's offline messages (WhatsApp keeps its own mark)
-  const prevOnline = Number(settings.lastOnline) || 0;
+  const savedOnline = Number(settings.lastOnline) || 0;
+  // (first run with this: WhatsApp's mark, read when it's up)
+  const prevOnline = () => savedOnline || wa?.prevOnline || 0;
   const markOnline = () => { settings.lastOnline = Math.floor(Date.now() / 1000); saveSettings(); };
   setInterval(markOnline, 60000);
   app.on('before-quit', markOnline);
   const popOffline = async (net) => {
-    if (!prevOnline) return;
-    for (const m of await net.unreadSince(prevOnline).catch(() => [])) deliverMessage(m);
+    const since = prevOnline();
+    if (!since) return;
+    for (const m of await net.unreadSince(since).catch(() => [])) deliverMessage(m);
   };
   if (!process.env.MSN_DEMO) tg.resume().then((ok) => ok && popOffline(tg)).catch(() => {});
   if (!process.env.MSN_DEMO) ig.resume().then((ok) => ok && popOffline(ig)).catch(() => {});

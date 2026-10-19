@@ -302,11 +302,33 @@ class TelegramService extends EventEmitter {
           pinned: !!d.pinned,
         });
       }
+      // my Telegram contacts I have no conversation with, too
+      const listed = new Set(chats.map((c) => c.jid));
+      for (const u of await this._contacts()) {
+        const id = String(u.id?.value ?? u.id);
+        if (listed.has(JID_PREFIX + id) || u.self || u.deleted) continue;
+        this.entities.set(id, u);
+        const pres = this._presenceOf(u);
+        chats.push({ jid: JID_PREFIX + id, source: 'telegram', name: this._entityName(u) || 'Telegram', isGroup: false, unread: 0, presence: pres.presence, lastIncoming: pres.lastIncoming, about: u.username ? `@${u.username}` : '', pinned: false, contactOnly: true });
+      }
       this.chats = chats;
       this.emit('roster', this.getRoster());
     } catch (e) {
       if (process.env.MSN_DEBUG) console.log('[tg] refresh failed:', e?.message);
     }
+  }
+
+  /** The account's contact list, fetched again every 10 min (their "last seen" changes). */
+  async _contacts() {
+    if (this.contactList && Date.now() - this.contactsAt < 10 * 60 * 1000) return this.contactList;
+    try {
+      const { Api } = require('telegram');
+      const r = await this.client.invoke(new Api.contacts.GetContacts({ hash: require('big-integer').zero }));
+      if (r.users) { this.contactList = r.users; this.contactsAt = Date.now(); }
+    } catch (e) {
+      if (process.env.MSN_DEBUG) console.log('[tg] contacts failed:', e?.message);
+    }
+    return this.contactList || [];
   }
 
   // map Telegram's user "last seen" to the same presence the WhatsApp side

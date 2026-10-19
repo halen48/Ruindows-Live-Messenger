@@ -822,6 +822,13 @@ class WhatsAppService extends EventEmitter {
         ...this.busyInfo(c.jid),
       }))
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
+    // everyone in my address book, not only people I've talked to: the ones
+    // without a conversation land in Online/Offline like any other contact
+    const listed = new Set(list.map((c) => c.jid));
+    for (const c of this.contacts.values()) {
+      if (!c.name || !c.jid?.endsWith('@s.whatsapp.net') || listed.has(c.jid) || c.jid === this.me?.jid) continue;
+      list.push({ jid: c.jid, name: c.name, unread: 0, isGroup: false, presence: this.presence.get(c.jid) || 'unavailable', lastIncoming: null, contactOnly: true });
+    }
     // "message yourself" chat, always listed so I can write to myself
     if (this.me?.jid) {
       const own = list.find((c) => c.jid === this.me.jid);
@@ -1252,7 +1259,8 @@ class WhatsAppService extends EventEmitter {
       this.favStickers = new Map(raw.favStickers || []);
       // the end of the previous session: anything newer that comes in while
       // the app catches up was sent to me while I was offline
-      this.lastOnline = Number(raw.lastOnline) || 0;
+      // (older stores don't have it: the newest saved message is close enough)
+      this.lastOnline = Number(raw.lastOnline) || Math.floor(Math.max(0, ...[...this.messages.values()].flat().map((m) => m.timestamp || 0)) / 1000);
       this.prevOnline = this.lastOnline;
     } catch {
       /* first run */

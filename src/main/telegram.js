@@ -437,7 +437,7 @@ class TelegramService extends EventEmitter {
       // the group window reads the author from senderNick
       senderNick: name,
       senderJid: sender?.id != null ? `${JID_PREFIX}${String(sender.id?.value ?? sender.id)}` : undefined,
-      ...(media ? { media, caption: caption || undefined, duration: m.video?.attributes?.find?.((a) => a.duration)?.duration } : {}),
+      ...(media ? { media, caption: caption || undefined, duration: m.video?.attributes?.find?.((a) => a.duration)?.duration, gif: !!m.gif || undefined } : {}),
       quote: this._quoteOf(jid, m),
     };
     // remembered so replies to it can show what they quote

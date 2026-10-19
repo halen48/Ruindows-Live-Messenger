@@ -668,7 +668,23 @@
   }
 
   /** Video: WhatsApp's embedded still with a play button; downloads and plays inline on click. */
+  // GIFs (mp4 on WhatsApp and Telegram) play by themselves, looping, muted
+  function loadGif(m, holder) {
+    const box = document.createElement('div');
+    box.textContent = 'GIF...';
+    holder.prepend(box);
+    window.msn.media(m.id).then((src) => {
+      if (!src) { box.textContent = '🎬 <GIF indisponível>'; return; }
+      const video = Object.assign(document.createElement('video'), { src, autoplay: true, loop: true, muted: true, playsInline: true });
+      video.className = 'gif';
+      video.muted = true;
+      video.addEventListener('dblclick', () => window.msn.openExternal(src));
+      box.replaceWith(video);
+    }).catch(() => { box.textContent = '🎬 <GIF indisponível>'; });
+  }
+
   function loadVideo(m, holder) {
+    if (m.gif) return loadGif(m, holder);
     const box = document.createElement('div');
     box.className = 'video-thumb';
     box.title = 'Reproduzir vídeo';

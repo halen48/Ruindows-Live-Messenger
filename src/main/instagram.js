@@ -419,6 +419,10 @@ class InstagramService extends EventEmitter {
       const head = x.header_title_text ? `${what} de ${x.header_title_text}` : what;
       ui.text = [head, c.xma_text_body, url].filter(Boolean).join('\n');
       if (x.preview_image?.url) this.rawMedia.set(ui.id, { url: x.preview_image.url, kind: 'image', thumb: x.preview_image.url });
+    } else if (/Raven/.test(kind) || /^RAVEN/.test(m.content_type || '')) {
+      // temporary ("view once") photo/video: Instagram only hands it to the
+      // phone app, the site itself can't show it either
+      ui.text = /VIDEO/.test(m.content_type || '') ? '🎬 Vídeo temporário (só abre no app do Instagram no celular)' : '📷 Foto temporária (só abre no app do Instagram no celular)';
     } else if (/Image|Photo/.test(kind) || m.content_type === 'IMAGES') {
       const url = this._findImage(c);
       if (url) { this.rawMedia.set(ui.id, { url, kind: 'image', thumb: url }); ui.media = 'image'; }

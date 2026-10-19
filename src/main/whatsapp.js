@@ -156,6 +156,7 @@ class WhatsAppService extends EventEmitter {
         });
         this._subscribeRecentPresence();
         this._fetchAbouts().catch(() => {});
+        this._watchBuffer(sock);
       }
       if (connection === 'close') {
         if (this.connected) this.lastOnline = Math.floor(Date.now() / 1000);
@@ -241,6 +242,8 @@ class WhatsAppService extends EventEmitter {
       this._scheduleSave();
     });
 
+    // raw arrivals (offline flag only), to tell "never arrives" from "stuck inside"
+    sock.ws.on('CB:message', (node) => this._diag({ ev: 'node', offline: !!node.attrs?.offline, buffering: !!sock.ev.isBuffering?.() }));
     sock.ev.on('messages.upsert', ({ messages, type }) => {
       this._diag({ ev: 'upsert', type, n: messages.length });
       if (type !== 'notify' && type !== 'append') return;
@@ -595,7 +598,7 @@ class WhatsAppService extends EventEmitter {
     const stream = {
       write: (line) => {
         // also: connection/buffer state and any error (keys only, never message text)
-        if (!/app.?state|syncd|resync|sync state|snapshot|patch|regular|critical|mutation|key.*(missing|not found|find)|AwaitingInitialSync|Online|buffer|decrypt|"level":(50|60)/i.test(line)) return;
+        if (!/app.?state|syncd|resync|sync state|snapshot|patch|regular|critical|mutation|key.*(missing|not found|find)|AwaitingInitialSync|Online|buffer|decrypt|handled \d+ offline|Syncing|"level":(50|60)/i.test(line)) return;
         try { fs.appendFileSync(file, line); } catch {}
       },
     };
@@ -1044,6 +1047,8 @@ class WhatsAppService extends EventEmitter {
       // tiny still WhatsApp embeds in every video, shown before downloading it
       thumb: thumb && thumb.length ? `data:image/jpeg;base64,${Buffer.from(thumb).toString('base64')}` : null,
       duration: m.videoMessage?.seconds || null,
+      // WhatsApp's GIFs are short mp4s flagged to loop silently
+      gif: !!m.videoMessage?.gifPlayback || undefined,
       quote: this._quoteOf(m, jid),
       senderName: msg.key.fromMe
         ? this.me?.name || 'Eu'
@@ -1234,6 +1239,27 @@ class WhatsAppService extends EventEmitter {
     if (!silent) this.emit('message', ui);
     else if (offline) this.emit('offline-message', ui);
     this._emitRoster();
+  }
+
+  /**
+   * Baileys holds every event (new messages included) in a buffer until the
+   * app-state sync after connecting finishes. When that sync stalls (it does
+   * here: 'resyncing' with no 'synced', then 'Timed Out') the buffer is never
+   * released and no message ever reaches the app. Release it if it stays
+   * held for more than ~20 s.
+   */
+  _watchBuffer(sock) {
+    clearInterval(this._bufferWatch);
+    let heldSince = 0;
+    this._bufferWatch = setInterval(() => {
+      if (this.sock !== sock) return clearInterval(this._bufferWatch);
+      if (!sock.ev.isBuffering?.()) { heldSince = 0; return; }
+      heldSince = heldSince || Date.now();
+      if (Date.now() - heldSince < 20000) return;
+      heldSince = 0;
+      this._diag({ ev: 'buffer-stuck-flushed' });
+      sock.ev.flush();
+    }, 5000);
   }
 
   /** What happens to incoming messages, without any content, in wa-data/incoming.log. */

@@ -22,6 +22,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, scr
 const QRCode = require('qrcode');
 const { WhatsAppService } = require('./whatsapp');
 const { AiService } = require('./ai');
+const { TelegramService, isTgJid } = require('./telegram');
 const storage = require('./storage');
 
 const RENDERER = path.join(__dirname, '..', 'renderer');
@@ -41,6 +42,7 @@ app.setPath('userData', USER_DATA);
 app.commandLine.appendSwitch('disk-cache-dir', storage.paths.browserCache());
 
 let wa = null;
+let tg = null; // Telegram (personal account via gramjs); null until started
 let loginWin = null;
 let buddyWin = null;
 const chatWins = new Map(); // jid -> BrowserWindow
@@ -387,7 +389,7 @@ async function startWhatsApp() {
         w.close();
       }
       broadcast('wa:open', me);
-      broadcast('wa:roster', wa.getRoster());
+      broadcast('wa:roster', fullRoster());
     };
     // let the sign-in window play its "Entrando..." animation first, like 8.5 did
     if (loginWin) {
@@ -410,7 +412,7 @@ async function startWhatsApp() {
     }
   });
 
-  wa.on('roster', (roster) => broadcast('wa:roster', roster));
+  wa.on('roster', () => broadcast('wa:roster', fullRoster()));
   wa.on('sync', (state) => broadcast('wa:sync', state));
   wa.on('presence', (p) => broadcast('wa:presence', p));
 
@@ -424,7 +426,14 @@ async function startWhatsApp() {
   await wa.start();
 }
 
-/** A new message (WhatsApp or an AI): tell every window, pop the chat, toast. */
+/** WhatsApp chats plus the Telegram ones, in a single roster for the list. */
+function fullRoster() {
+  const base = wa.getRoster();
+  const tgChats = tg ? tg.getRoster() : [];
+  return { ...base, chats: [...(base.chats || []), ...tgChats] };
+}
+
+/** A new message (WhatsApp, Telegram or an AI): tell every window, pop, toast. */
 function deliverMessage(msg) {
   // the chat window, when open, plays the sound; the buddy list only when it isn't
   const open = chatWins.get(msg.chatJid);
@@ -457,7 +466,7 @@ ipcMain.handle('assets:original', () => {
   }
 });
 
-ipcMain.handle('wa:getRoster', () => wa.getRoster());
+ipcMain.handle('wa:getRoster', () => fullRoster());
 ipcMain.handle('wa:media', async (_e, id) => {
   const file = await wa.getMedia?.(id);
   return file ? require('url').pathToFileURL(file).href : null;
@@ -577,6 +586,10 @@ ipcMain.on('ui:setStatus', (_e, status) => setMyStatus(status));
 // sync, so a chat window popped open by a message knows before it plays a sound
 ipcMain.on('ui:statusSync', (e) => { e.returnValue = myStatus; });
 ipcMain.handle('wa:getMessages', async (_e, jid) => {
+  if (isTgJid(jid)) {
+    const chat = tg.getRoster().find((c) => c.jid === jid);
+    return { jid, name: chat?.name || 'Telegram', me: wa.me, messages: await tg.getMessages(jid), presence: 'available', source: 'telegram' };
+  }
   if (AiService.isAiJid(jid)) {
     return { jid, name: ai.displayName(jid), me: wa.me, messages: await ai.getMessages(jid), presence: 'available', isAi: true };
   }
@@ -594,19 +607,20 @@ const getMessagesPayload = (jid) => ({
   ...(wa.busyInfo?.(jid) || {}),
 });
 ipcMain.handle('wa:send', (_e, { jid, text, quotedId }) =>
-  AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
+  isTgJid(jid) ? tg.send(jid, text) : AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
 ipcMain.handle('wa:nudge', async (_e, jid) => {
   if (AiService.isAiJid(jid)) throw new Error('não disponível para IAs');
   const win = chatWins.get(jid);
   shakeWindow(win);
   return wa.sendNudge(jid);
 });
-ipcMain.handle('wa:typing', (_e, { jid, composing }) => (AiService.isAiJid(jid) ? null : wa.setTyping(jid, composing)));
+ipcMain.handle('wa:typing', (_e, { jid, composing }) => (isTgJid(jid) ? tg.setTyping(jid, composing) : AiService.isAiJid(jid) ? null : wa.setTyping(jid, composing)));
 ipcMain.handle('wa:setPresence', (_e, state) => wa.setMyPresence(state));
 // my own WhatsApp picture is also kept on disk so the sign-in screen can show
 // it before WhatsApp connects
 const MY_DP_FILE = path.join(USER_DATA, 'my-display-picture.jpg');
 ipcMain.handle('wa:avatar', async (_e, jid) => {
+  if (isTgJid(jid)) return tg.avatar(jid);
   if (AiService.isAiJid(jid)) return null;
   const url = await wa.getAvatar(jid);
   if (url && jid && jid === wa.me?.jid) {
@@ -622,7 +636,7 @@ ipcMain.handle('ui:cachedMyDp', () => {
   if (settings.profile?.dp) return settings.profile.dp;
   return fs.existsSync(MY_DP_FILE) ? require('url').pathToFileURL(MY_DP_FILE).href + '?t=' + fs.statSync(MY_DP_FILE).mtimeMs : null;
 });
-ipcMain.handle('wa:markRead', (_e, jid) => (AiService.isAiJid(jid) ? null : wa.markRead(jid)));
+ipcMain.handle('wa:markRead', (_e, jid) => (isTgJid(jid) ? tg.markRead(jid) : AiService.isAiJid(jid) ? null : wa.markRead(jid)));
 ipcMain.handle('wa:signOut', () => wa.signOut());
 
 ipcMain.handle('wa:sendImage', (_e, { jid, dataUrl }) => {
@@ -701,6 +715,20 @@ ipcMain.handle('wa:mediaCached', (_e, id) => {
   return file ? require('url').pathToFileURL(file).href : null;
 });
 
+// ---- Telegram --------------------------------------------------------------
+// Personal account over MTProto (gramjs). The api_id/api_hash come from the
+// user (my.telegram.org) and, with the session, are stored on this PC only.
+const { safeStorage } = require('electron');
+tg = new TelegramService({ stateFile: path.join(USER_DATA, 'telegram', 'state.json'), safeStorage });
+tg.on('message', (msg) => deliverMessage(msg));
+tg.on('roster', () => broadcast('wa:roster', fullRoster()));
+tg.on('login', (st) => broadcast('tg:login', st));
+ipcMain.handle('tg:status', () => tg.status());
+ipcMain.handle('tg:startLogin', (_e, opts) => tg.startLogin(opts || {}));
+ipcMain.handle('tg:submitCode', (_e, code) => tg.submitCode(code));
+ipcMain.handle('tg:submitPassword', (_e, pw) => tg.submitPassword(pw));
+ipcMain.handle('tg:logout', () => tg.logout());
+
 // ---- App lifecycle ------------------------------------------------------
 
 app.whenReady().then(async () => {
@@ -709,6 +737,9 @@ app.whenReady().then(async () => {
   setupTray();
   // AI sites load in the background; their list fills in when ready
   if (aiShown().length) setTimeout(() => ai.refresh(), 3000);
+  // resume a saved Telegram session quietly; if it needs a fresh login the
+  // user starts one from the add-contact menu
+  if (!process.env.MSN_DEMO) tg.resume().catch(() => {});
   await startWhatsApp();
 });
 

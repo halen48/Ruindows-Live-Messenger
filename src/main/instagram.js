@@ -63,6 +63,7 @@ class InstagramService extends EventEmitter {
     this.sendQueue = Promise.resolve();
     this.following = []; // people I follow: the "contacts" of Instagram
     this.userThreads = new Map(); // username -> thread id, for 1:1 conversations
+    this.uiById = new Map(); // shown messages, for replies' quotes
   }
 
   // people I follow with no conversation yet are listed as ig:user:<username>
@@ -307,6 +308,49 @@ class InstagramService extends EventEmitter {
 
   getRoster() { return this.chats; }
 
+  /**
+   * Answer the bubble showing `text` (the newest one with it) the way I
+   * would: hover it for real, then press its own "reply" button.
+   */
+  async _pressReply(win, text) {
+    // the site draws emoji as images (gone from the page's text): compare
+    // without them and without spacing
+    const norm = (t) => String(t || '').replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\s]/gu, '');
+    const want = norm(String(text || '').split('\n')[0]).slice(0, 40);
+    if (!want) return false;
+    // the conversation takes a few seconds to draw its messages
+    for (let i = 0; i < 40; i++) {
+      // every element showing the text, newest first (the conversation list
+      // on the left shows it too, without a reply button)
+      const spots = await win.webContents.executeJavaScript(`(() => {
+        const norm = ${norm.toString()};
+        window.__msnReply = [...document.querySelectorAll('div[dir=auto], span[dir=auto]')].filter((e) => norm(e.innerText).startsWith(${JSON.stringify(want)}) && !e.closest('[contenteditable]')).reverse();
+        return window.__msnReply.length;
+      })()`);
+      for (let k = 0; k < spots; k++) {
+        const at = await win.webContents.executeJavaScript(`(() => {
+          const el = window.__msnReply[${k}];
+          el.scrollIntoView({ block: 'center' });
+          const b = el.getBoundingClientRect();
+          return { x: Math.round(b.x + Math.min(b.width / 2, 40)), y: Math.round(b.y + b.height / 2) };
+        })()`);
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: at.x, y: at.y });
+        await sleep(600);
+        const ok = await win.webContents.executeJavaScript(`(() => {
+          let row = window.__msnReply[${k}], btn = null;
+          for (let up = 0; row && up < 8 && !(btn = row.querySelector('[aria-label^="Responda"], [aria-label^="Reply"]')); up++) row = row.parentElement;
+          if (!btn) return false;
+          (btn.closest('[role=button]') || btn).click();
+          return true;
+        })()`);
+        if (ok) { await sleep(500); return true; }
+      }
+      await sleep(500);
+    }
+    return false;
+  }
+
+
   /** Unread conversations whose latest message came after `since` (seconds): sent while I was offline. */
   async unreadSince(since) {
     const out = [];
@@ -390,6 +434,14 @@ class InstagramService extends EventEmitter {
     } else {
       ui.text = m.text_body || `<${(m.content_type || kind || 'mensagem').toLowerCase()}>`;
     }
+    // a reply: show what it answers (the quoted message is in the same thread)
+    const rid = m.replied_to_message_id;
+    if (rid) {
+      const q = this.uiById.get(`${jid}:${rid}`);
+      ui.quote = { id: `${jid}:${rid}`, text: q?.text || (q ? '' : 'Mensagem'), media: q?.media || null, caption: null, thumb: null, fromMe: !!q?.fromMe, senderName: q?.fromMe ? null : q?.senderName || null };
+    }
+    this.uiById.set(ui.id, ui);
+    if (this.uiById.size > 20000) this.uiById.delete(this.uiById.keys().next().value);
     return ui;
   }
 
@@ -439,18 +491,22 @@ class InstagramService extends EventEmitter {
    * Send by typing into the conversation in the hidden window, like I would
    * (the site sends DMs over its own socket, which can't be replayed).
    */
-  send(jid, text) {
-    const run = this.sendQueue.then(() => this._send(jid, text));
+  send(jid, text, quotedId) {
+    const run = this.sendQueue.then(() => this._send(jid, text, quotedId));
     this.sendQueue = run.catch(() => {});
     return run;
   }
 
-  async _send(jid, text) {
+  async _send(jid, text, quotedId) {
     // someone I follow with no conversation yet: open one first
     let id = this._threadId(jid);
     if (!id) id = this._idOf(await this.startChat(this._userOf(jid)));
     const win = await this._go(`${ORIGIN}/direct/t/${id}/`);
     const BOX = 'div[contenteditable="true"][role="textbox"], div[contenteditable="true"][aria-label]';
+    // the window has to really draw for hover buttons to show up
+    if (quotedId && !(await this._pressReply(win, this.uiById.get(quotedId)?.text))) {
+      throw new Error('não achei a mensagem pra responder no Instagram');
+    }
     const ok = await win.webContents.executeJavaScript(`(async () => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       let box = null;

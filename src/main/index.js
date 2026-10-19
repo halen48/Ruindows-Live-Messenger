@@ -684,7 +684,7 @@ const getMessagesPayload = (jid) => ({
   ...(wa.busyInfo?.(jid) || {}),
 });
 ipcMain.handle('wa:send', (_e, { jid, text, quotedId }) =>
-  netFor(jid) ? netFor(jid).send(jid, text) : AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
+  netFor(jid) ? netFor(jid).send(jid, text, quotedId) : AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
 ipcMain.handle('wa:nudge', async (_e, jid) => {
   if (AiService.isAiJid(jid)) throw new Error('não disponível para IAs');
   const win = chatWins.get(jid);

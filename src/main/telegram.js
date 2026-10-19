@@ -43,6 +43,7 @@ class TelegramService extends EventEmitter {
     this.mediaDir = stateFile ? path.join(path.dirname(stateFile), 'media') : null;
     // gramjs messages with media, by UI id, so the window can ask to download
     this.rawMedia = new Map();
+    this.uiById = new Map();
     this.lastMsg = new Map(); // jid -> newest gramjs message, for offline messages
     // resolves once a saved session finished connecting (or turned out invalid)
     this.ready = new Promise((r) => { this._setReady = r; });
@@ -408,7 +409,7 @@ class TelegramService extends EventEmitter {
     const text = media ? caption || (media === 'video' ? '\u{1F3AC} <vídeo>' : '\u{1F4F7} <foto>') : caption && label ? `${label}\n${caption}` : caption || label;
     if (media) this.rawMedia.set(`${jid}:${m.id}`, m);
     const name = m.out ? null : (this._entityName(sender) || undefined);
-    return {
+    const ui = {
       id: `${jid}:${m.id}`,
       chatJid: jid,
       fromMe: !!m.out,
@@ -420,7 +421,12 @@ class TelegramService extends EventEmitter {
       senderNick: name,
       senderJid: sender?.id != null ? `${JID_PREFIX}${String(sender.id?.value ?? sender.id)}` : undefined,
       ...(media ? { media, caption: caption || undefined, duration: m.video?.attributes?.find?.((a) => a.duration)?.duration } : {}),
+      quote: this._quoteOf(jid, m),
     };
+    // remembered so replies to it can show what they quote
+    this.uiById.set(ui.id, ui);
+    if (this.uiById.size > 20000) this.uiById.delete(this.uiById.keys().next().value);
+    return ui;
   }
 
   // resolve the author when gramjs didn't attach it (cached, so cheap)
@@ -438,7 +444,10 @@ class TelegramService extends EventEmitter {
       const ent = await this._entity(jid);
       const msgs = await this.client.getMessages(ent, { limit });
       // gramjs returns newest first; the UI wants oldest first
-      const ui = await Promise.all([...msgs].reverse().map((m) => this._withSender(jid, m)));
+      const list = [...msgs].reverse();
+      const ui = await Promise.all(list.map((m) => this._withSender(jid, m)));
+      // senders resolve out of order: fill quotes now that the whole page is known
+      ui.forEach((u, i) => { if (u.quote) u.quote = this._quoteOf(jid, list[i]); });
       return ui.filter((m) => m.text);
     } catch (e) {
       if (process.env.MSN_DEBUG) console.log('[tg] history failed:', e?.message);
@@ -446,10 +455,29 @@ class TelegramService extends EventEmitter {
     }
   }
 
-  async send(jid, text) {
+  async send(jid, text, quotedId) {
     const ent = await this._entity(jid);
-    const sent = await this.client.sendMessage(ent, { message: text });
+    // a reply: ids are "<chat>:<message id>"
+    const replyTo = quotedId ? Number(String(quotedId).split(':').pop()) || undefined : undefined;
+    const sent = await this.client.sendMessage(ent, { message: text, replyTo });
     return this._toUi(jid, sent);
+  }
+
+  /** The message this one replies to, in the shape the chat window shows. */
+  _quoteOf(jid, m) {
+    const rid = m.replyTo?.replyToMsgId;
+    if (!rid) return null;
+    const q = this.uiById.get(`${jid}:${rid}`);
+    return {
+      id: `${jid}:${rid}`,
+      text: q?.text || (q ? '' : 'Mensagem'),
+      media: q?.media === 'image' || q?.media === 'video' || q?.media === 'sticker' ? q.media : null,
+      caption: q?.caption || null,
+      thumb: null,
+      fromMe: !!q?.fromMe,
+      senderJid: q?.senderJid,
+      senderName: q?.fromMe ? null : q?.senderName || null,
+    };
   }
 
   _mediaFile(id, m) {

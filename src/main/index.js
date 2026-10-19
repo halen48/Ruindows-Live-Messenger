@@ -300,48 +300,40 @@ function fallbackTrayImage() {
 // status: left as-is online/connecting, amber when away, red when busy, grey
 // when offline. No invented art — just a tint of the real icon.
 const trayCache = new Map();
-// logged in = green (all statuses tint the icon); only "connecting" keeps the
-// original green+blue. offline = grey (null tint = desaturate).
-const TRAY_TINT = { online: [88, 200, 50], away: [242, 169, 30], brb: [242, 169, 30], lunch: [242, 169, 30], busy: [224, 81, 63], phone: [224, 81, 63], offline: null };
-function recolor(base, state) {
-  if (state === 'connecting' || (state !== 'offline' && !(state in TRAY_TINT))) return base; // original colours
-  const { width, height } = base.getSize();
-  const buf = Buffer.from(base.toBitmap()); // BGRA
-  const tint = TRAY_TINT[state]; // [r,g,b] or null (grey)
-  for (let i = 0; i < buf.length; i += 4) {
-    if (buf[i + 3] === 0) continue; // keep transparent pixels
-    const b = buf[i], g = buf[i + 1], r = buf[i + 2];
-    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255; // 0..1
-    if (tint) { // colorize: target hue scaled by the pixel's brightness
-      buf[i] = Math.round(tint[2] * lum);
-      buf[i + 1] = Math.round(tint[1] * lum);
-      buf[i + 2] = Math.round(tint[0] * lum);
-    } else { // grey
-      const v = Math.round(lum * 255);
-      buf[i] = buf[i + 1] = buf[i + 2] = v;
-    }
-  }
-  return nativeImage.createFromBitmap(buf, { width, height });
-}
-async function trayStatusImage(state) {
+// the tray shows the real MSN icons, no recolouring: the single green buddy
+// with the status badge when signed in (same art the contacts use), and the
+// green+blue two-buddies icon only while connecting
+const WLM = path.join(RENDERER, 'assets', 'wlm85');
+const TRAY_FILE = {
+  connecting: path.join(RENDERER, 'assets', 'wlm85', 'tray-icon.png'), // green+blue
+  online: path.join(WLM, 'status16-online.png'),
+  busy: path.join(WLM, 'status16-busy.png'),
+  phone: path.join(WLM, 'status16-busy.png'),
+  away: path.join(WLM, 'status16-away.png'),
+  brb: path.join(WLM, 'status16-away.png'),
+  lunch: path.join(WLM, 'status16-away.png'),
+  offline: path.join(WLM, 'status16-invisible.png'),
+};
+function trayStatusImage(state) {
   if (trayCache.has(state)) return trayCache.get(state);
-  let base = nativeImage.createFromPath(TRAY_ICON);
-  if (base.isEmpty()) base = fallbackTrayImage();
-  const img = recolor(base, state);
+  const file = TRAY_FILE[state] || TRAY_FILE.online;
+  let img = nativeImage.createFromPath(file);
+  if (img.isEmpty()) img = fallbackTrayImage();
   trayCache.set(state, img);
   return img;
 }
-async function setTrayStatus(state) {
+function setTrayStatus(state) {
   if (!tray || tray.isDestroyed?.()) return;
-  const img = await trayStatusImage(state === 'connecting' ? 'connecting' : state);
+  const img = trayStatusImage(state === 'connecting' ? 'connecting' : state);
   const traySize = process.platform === 'linux' ? 22 : 16;
   try { tray.setImage(img.resize({ width: traySize, height: traySize, quality: 'best' })); } catch {}
 }
 
 async function setupTray() {
-  // the original MSN icon; it gets tinted as the status changes
-  let image = nativeImage.createFromPath(TRAY_ICON);
-  if (image.isEmpty()) image = fallbackTrayImage();
+  // start on the connecting (green+blue) icon; it becomes the green status
+  // buddy once WhatsApp is up
+  let image = trayStatusImage('connecting');
+  if (!image || image.isEmpty()) image = fallbackTrayImage();
 
   try {
     // panel icons are 22px on Linux, 16px in the Windows tray and the macOS menu bar

@@ -154,6 +154,8 @@
   // inline styles (dialogs, menus, things set from JS) are flipped in place
   function darkInline(el) {
     if (!el.getAttribute || el.dataset.lightStyle !== undefined) return;
+    // real colors that mean something (the picture editor's palette, text on a photo)
+    if (el.closest?.('[data-true-color]')) return;
     const style = el.getAttribute('style');
     if (!style || !/(#|rgb|white|black|gr[ae]y|silver|url\()/i.test(style)) return;
     const decls = darkDecls(el.style);

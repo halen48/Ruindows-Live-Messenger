@@ -127,6 +127,34 @@
   #replyBar .rb-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #replyBar .rb-close { cursor: pointer; padding: 0 4px; color: #6d6d6d; }
   #replyBar .rb-close:hover { color: #c00; }
+
+  /* pictures/files waiting to be sent (Ctrl+V, drop, "Enviar arquivo") */
+  #attachBar { display: flex; gap: 6px; padding: 5px 6px; border: 1px solid #c5d3e3; border-bottom: 0; background: #eef3f9; overflow-x: auto; }
+  #attachBar[hidden] { display: none; }
+  #attachBar .att { position: relative; flex: 0 0 auto; width: 58px; height: 58px; border: 1px solid #9fb6d0; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #attachBar .att:hover { border-color: #3a7bd5; box-shadow: 0 0 0 1px #3a7bd5; }
+  #attachBar .att img { max-width: 100%; max-height: 100%; display: block; }
+  #attachBar .att .file { font-size: 10px; color: #444; text-align: center; padding: 2px; word-break: break-all; overflow: hidden; max-height: 100%; }
+  #attachBar .att .x { position: absolute; top: -1px; right: -1px; width: 15px; height: 15px; line-height: 13px; text-align: center; font-size: 11px; background: #fff; border: 1px solid #9fb6d0; color: #6d6d6d; }
+  #attachBar .att .x:hover { color: #c00; }
+
+  /* picture editor (crop, paint, text, rotate) */
+  #imgEditor { position: fixed; inset: 0; z-index: 50; background: rgba(20, 30, 45, .82); display: flex; flex-direction: column; }
+  #imgEditor[hidden] { display: none; }
+  #imgEditor .ie-bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; background: linear-gradient(#f4f8fc, #dce7f3); border-bottom: 1px solid #9fb6d0; flex-wrap: wrap; }
+  #imgEditor .ie-tool { padding: 3px 8px; border: 1px solid transparent; border-radius: 3px; cursor: pointer; color: #1e395b; user-select: none; }
+  #imgEditor .ie-tool:hover { border-color: #9fb6d0; background: #fff; }
+  #imgEditor .ie-tool.active { border-color: #3a7bd5; background: #fff; box-shadow: inset 0 0 0 1px #cfe0f5; }
+  #imgEditor .ie-sep { width: 1px; height: 20px; background: #b4c6da; margin: 0 4px; }
+  #imgEditor #ieColors { display: inline-flex; gap: 4px; align-items: center; }
+  #imgEditor .ie-color { display: inline-block; width: 16px; height: 16px; border: 1px solid #6d7f94; cursor: pointer; }
+  #imgEditor .ie-color.active { outline: 2px solid #3a7bd5; outline-offset: 1px; }
+  #imgEditor .ie-stage { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 12px; position: relative; }
+  #imgEditor .ie-wrap { position: relative; line-height: 0; }
+  #imgEditor canvas { max-width: calc(100vw - 24px); max-height: calc(100vh - 110px); box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; }
+  #imgEditor #ieOverlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-shadow: none; background: transparent; }
+  #imgEditor .ie-text { position: absolute; z-index: 2; font: bold 16px Segoe UI, sans-serif; border: 1px dashed #fff; background: rgba(0,0,0,.25); outline: none; padding: 1px 3px; min-width: 60px; line-height: normal; }
+  #imgEditor .ie-foot { display: flex; justify-content: flex-end; gap: 6px; padding: 6px 8px; background: #dce7f3; border-top: 1px solid #9fb6d0; }
   /* video: thumbnail with a play button until clicked */
   .video-thumb { position: relative; display: inline-block; margin: 3px 0; cursor: pointer; border: 1px solid #d0d0d0; }
   .video-thumb img { display: block; width: 240px; min-height: 60px; background: #222; }
@@ -359,6 +387,7 @@
       </div>
 
       <div id="replyBar" hidden><span class="rb-text" id="replyText"></span><span class="rb-close" id="replyClose" title="Cancelar resposta">✕</span></div>
+      <div id="attachBar" hidden></div>
       <div class="input-box" id="inputRow">
         <textarea id="input" spellcheck="false"></textarea>
         <canvas id="inkCanvas" height="68"></canvas>
@@ -402,6 +431,24 @@
 <script src="js/emoticons.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/activity.js"></script>
+<div id="imgEditor" hidden data-true-color>
+  <div class="ie-bar">
+    <span class="ie-tool active" data-tool="paint" title="Pintar">&#9998; Pintar</span>
+    <span class="ie-tool" data-tool="crop" title="Arraste para escolher a área">&#9986; Cortar</span>
+    <span class="ie-tool" data-tool="text" title="Clique na imagem para escrever">T Texto</span>
+    <span class="ie-tool" id="ieRotate" title="Girar 90°">&#10227; Girar</span>
+    <span class="ie-sep"></span>
+    <span id="ieColors"></span>
+    <span class="ie-sep"></span>
+    <select id="ieSize" title="Espessura"><option value="0.004">Fino</option><option value="0.009" selected>Médio</option><option value="0.018">Grosso</option></select>
+    <span class="ie-sep"></span>
+    <span class="ie-tool" id="ieUndo" title="Desfazer (Ctrl+Z)">&#8630; Desfazer</span>
+    <button class="wlm-button" id="ieCropApply" hidden>Cortar</button>
+  </div>
+  <div class="ie-stage"><div class="ie-wrap"><canvas id="ieCanvas"></canvas><canvas id="ieOverlay"></canvas></div></div>
+  <div class="ie-foot"><button class="wlm-button" id="ieCancel">Cancelar</button><button class="wlm-button" id="ieDone">Concluir</button></div>
+</div>
+
 <script>
   const jid = new URLSearchParams(location.search).get('jid');
   // Telegram groups (tg:<id>) only reveal their group-ness in the payload, so
@@ -412,6 +459,7 @@
   if (isAi) document.documentElement.classList.add('ai-chat');
   const historyEl = document.getElementById('history');
   const inputEl = document.getElementById('input');
+  const pending = []; // attachments waiting for Enter: { name, type, dataUrl, isImage }
   const sendBtn = document.getElementById('sendBtn');
   const statusBar = document.getElementById('statusText');
   const awayNotice = document.getElementById('awayNotice');
@@ -970,7 +1018,7 @@
   let typingTimer = null;
 
   function updateSendBtn() {
-    sendBtn.disabled = inkMode ? !inkDirty : !inputEl.value.trim();
+    sendBtn.disabled = inkMode ? !inkDirty : !inputEl.value.trim() && !pending.length;
   }
 
   function wrapFormatting(text) {
@@ -991,6 +1039,7 @@
       return;
     }
     const text = inputEl.value.trim();
+    if (pending.length) sendPending();
     if (!text) return;
     inputEl.value = '';
     updateSendBtn();
@@ -1006,47 +1055,301 @@
     window.msn.nudge(jid).then(appendMessage);
   }
 
+  // "Enviar arquivo": pick one or more, they go to the tray like a paste
   function sendFile() {
     if (isAi) return unavailable('Enviar arquivos');
-    window.msn.sendFile(jid).then((m) => m && appendMessage(m));
+    const pick = document.createElement('input');
+    pick.type = 'file';
+    pick.multiple = true;
+    pick.addEventListener('change', () => addAttachments([...pick.files]));
+    pick.click();
   }
 
-  // Ctrl+V a print/foto/arquivo: images go as photos, anything else as a file.
-  // Plain text keeps pasting into the box as usual.
+  // ---- attachments: Ctrl+V / drop / "Enviar arquivo" queue up here with a
+  // preview, like the MSN file tray; Enter sends them all. Pictures can be
+  // edited first (crop, paint, text, rotate), like WhatsApp.
+  const attachBar = document.getElementById('attachBar');
   const readAsDataUrl = (file) => new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(r.result);
     r.onerror = () => reject(r.error);
     r.readAsDataURL(file);
   });
-  async function sendPastedFiles(files) {
+
+  function renderAttachments() {
+    attachBar.hidden = !pending.length;
+    attachBar.replaceChildren(...pending.map((a, i) => {
+      const el = document.createElement('div');
+      el.className = 'att';
+      el.title = a.isImage ? `${a.name} (clique para editar)` : a.name;
+      if (a.isImage) { const img = document.createElement('img'); img.src = a.dataUrl; el.append(img); }
+      else { const f = document.createElement('div'); f.className = 'file'; f.textContent = `\u{1F4CE} ${a.name}`; el.append(f); }
+      const x = document.createElement('span');
+      x.className = 'x'; x.textContent = '✕'; x.title = 'Remover';
+      x.addEventListener('click', (e) => { e.stopPropagation(); pending.splice(i, 1); renderAttachments(); });
+      el.append(x);
+      if (a.isImage) el.addEventListener('click', () => openEditor(a));
+      return el;
+    }));
+    updateSendBtn();
+  }
+
+  async function addAttachments(files) {
     if (isAi) return unavailable('Enviar arquivos');
     for (const file of files) {
       try {
-        const dataUrl = await readAsDataUrl(file);
-        const m = file.type.startsWith('image/')
-          ? await window.msn.sendImage(jid, dataUrl)
-          : await window.msn.sendBlob(jid, file.name, dataUrl);
+        pending.push({ name: file.name || 'imagem.png', type: file.type, dataUrl: await readAsDataUrl(file), isImage: /^image\/(png|jpe?g|gif|webp|bmp)$/.test(file.type) });
+      } catch (e) {
+        console.error('attach failed', e);
+      }
+    }
+    renderAttachments();
+    inputEl.focus();
+  }
+
+  async function sendPending() {
+    const items = pending.splice(0);
+    renderAttachments();
+    for (const a of items) {
+      try {
+        const m = a.isImage
+          ? await window.msn.sendImage(jid, a.dataUrl)
+          : await window.msn.sendBlob(jid, a.name, a.dataUrl);
         if (m) appendMessage(m);
       } catch (e) {
-        console.error('paste send failed', e);
+        console.error('send failed', e);
       }
     }
   }
+
   document.addEventListener('paste', (e) => {
+    if (!editor.hidden) return;
     const files = [...(e.clipboardData?.files || [])];
     if (!files.length) return; // text: default paste
     e.preventDefault();
-    sendPastedFiles(files);
+    addAttachments(files);
   });
-  // dropping files on the window sends them the same way
   document.addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
   document.addEventListener('drop', (e) => {
     const files = [...(e.dataTransfer?.files || [])];
     if (!files.length) return;
     e.preventDefault();
-    sendPastedFiles(files);
+    addAttachments(files);
   });
+
+  // ---- picture editor ---------------------------------------------------------
+  const editor = document.getElementById('imgEditor');
+  const ieCanvas = document.getElementById('ieCanvas');
+  const ieOverlay = document.getElementById('ieOverlay');
+  const iectx = ieCanvas.getContext('2d');
+  const COLORS = ['#ff0000', '#ff8c00', '#ffd700', '#22b14c', '#00a2e8', '#3f48cc', '#a349a4', '#000000', '#ffffff'];
+  let ieItem = null, ieTool = 'paint', ieColor = COLORS[0], ieHistory = [], ieCrop = null, ieText = null;
+
+  document.getElementById('ieColors').replaceChildren(...COLORS.map((c) => {
+    const sw = document.createElement('span');
+    sw.className = 'ie-color' + (c === ieColor ? ' active' : '');
+    sw.style.background = c;
+    sw.addEventListener('click', () => {
+      ieColor = c;
+      document.querySelectorAll('#ieColors .ie-color').forEach((x) => x.classList.toggle('active', x === sw));
+      if (ieText) ieText.style.color = c;
+    });
+    return sw;
+  }));
+
+  function ieSnapshot() {
+    ieHistory.push(iectx.getImageData(0, 0, ieCanvas.width, ieCanvas.height));
+    if (ieHistory.length > 30) ieHistory.shift();
+  }
+  function ieSetSize(w, h) {
+    ieCanvas.width = ieOverlay.width = w;
+    ieCanvas.height = ieOverlay.height = h;
+  }
+  function ieUndo() {
+    commitText(false);
+    const prev = ieHistory.pop();
+    if (!prev) return;
+    ieSetSize(prev.width, prev.height);
+    iectx.putImageData(prev, 0, 0);
+    clearCrop();
+  }
+  // pointer position in image pixels (the canvas is shown scaled down)
+  function iePoint(e) {
+    const r = ieCanvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (ieCanvas.width / r.width), y: (e.clientY - r.top) * (ieCanvas.height / r.height) };
+  }
+  const ieLine = () => Math.max(2, Number(document.getElementById('ieSize').value) * Math.max(ieCanvas.width, ieCanvas.height));
+
+  function setTool(tool) {
+    commitText(true);
+    ieTool = tool;
+    editor.querySelectorAll('.ie-tool[data-tool]').forEach((t) => t.classList.toggle('active', t.dataset.tool === tool));
+    ieOverlay.style.cursor = tool === 'text' ? 'text' : 'crosshair';
+    clearCrop();
+  }
+  editor.querySelectorAll('.ie-tool[data-tool]').forEach((t) => t.addEventListener('click', () => setTool(t.dataset.tool)));
+
+  function clearCrop() {
+    ieCrop = null;
+    ieOverlay.getContext('2d').clearRect(0, 0, ieOverlay.width, ieOverlay.height);
+    document.getElementById('ieCropApply').hidden = true;
+  }
+  function drawCrop() {
+    const o = ieOverlay.getContext('2d');
+    o.clearRect(0, 0, ieOverlay.width, ieOverlay.height);
+    if (!ieCrop) return;
+    const { x, y, w, h } = normRect(ieCrop);
+    o.fillStyle = 'rgba(0,0,0,.5)';
+    o.fillRect(0, 0, ieOverlay.width, ieOverlay.height);
+    o.clearRect(x, y, w, h);
+    o.strokeStyle = '#fff';
+    o.lineWidth = Math.max(1, ieOverlay.width / 400);
+    o.setLineDash([o.lineWidth * 6, o.lineWidth * 4]);
+    o.strokeRect(x, y, w, h);
+  }
+  const normRect = (c) => ({ x: Math.min(c.x0, c.x1), y: Math.min(c.y0, c.y1), w: Math.abs(c.x1 - c.x0), h: Math.abs(c.y1 - c.y0) });
+  function applyCrop() {
+    if (!ieCrop) return;
+    const { x, y, w, h } = normRect(ieCrop);
+    if (w < 4 || h < 4) return clearCrop();
+    ieSnapshot();
+    const part = iectx.getImageData(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    ieSetSize(part.width, part.height);
+    iectx.putImageData(part, 0, 0);
+    clearCrop();
+  }
+  document.getElementById('ieCropApply').addEventListener('click', applyCrop);
+
+  let ieDrag = null;
+  ieOverlay.addEventListener('pointerdown', (e) => {
+    const p = iePoint(e);
+    if (ieTool === 'text') return placeText(e, p);
+    ieOverlay.setPointerCapture(e.pointerId);
+    if (ieTool === 'paint') {
+      ieSnapshot();
+      iectx.strokeStyle = ieColor;
+      iectx.lineWidth = ieLine();
+      iectx.lineCap = iectx.lineJoin = 'round';
+      iectx.beginPath();
+      iectx.moveTo(p.x, p.y);
+      iectx.lineTo(p.x + 0.01, p.y);
+      iectx.stroke();
+    } else if (ieTool === 'crop') {
+      ieCrop = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    }
+    ieDrag = p;
+  });
+  ieOverlay.addEventListener('pointermove', (e) => {
+    if (!ieDrag) return;
+    const p = iePoint(e);
+    if (ieTool === 'paint') {
+      iectx.lineTo(p.x, p.y);
+      iectx.stroke();
+    } else if (ieTool === 'crop') {
+      ieCrop.x1 = Math.max(0, Math.min(ieCanvas.width, p.x));
+      ieCrop.y1 = Math.max(0, Math.min(ieCanvas.height, p.y));
+      drawCrop();
+    }
+  });
+  ieOverlay.addEventListener('pointerup', () => {
+    if (ieTool === 'crop' && ieCrop) document.getElementById('ieCropApply').hidden = false;
+    ieDrag = null;
+  });
+
+  // text: a small box where I click; Enter (or clicking elsewhere) stamps it
+  function placeText(e, p) {
+    commitText(true);
+    const wrap = editor.querySelector('.ie-wrap');
+    const r = wrap.getBoundingClientRect();
+    const scale = ieCanvas.getBoundingClientRect().width / ieCanvas.width;
+    const size = Math.max(14, Math.round(ieCanvas.width * 0.045));
+    ieText = document.createElement('div');
+    ieText.className = 'ie-text';
+    ieText.contentEditable = 'true';
+    ieText.style.left = `${e.clientX - r.left}px`;
+    ieText.style.top = `${e.clientY - r.top - size * scale * 0.6}px`;
+    ieText.style.fontSize = `${size * scale}px`;
+    ieText.style.color = ieColor;
+    ieText.dataset.x = p.x;
+    ieText.dataset.y = p.y;
+    ieText.dataset.size = size;
+    ieText.addEventListener('keydown', (k) => {
+      k.stopPropagation();
+      if (k.key === 'Enter') { k.preventDefault(); commitText(true); }
+      if (k.key === 'Escape') { k.preventDefault(); commitText(false); }
+    });
+    wrap.append(ieText);
+    setTimeout(() => ieText?.focus(), 0);
+  }
+  function commitText(keep) {
+    if (!ieText) return;
+    const t = ieText.innerText.trim();
+    if (keep && t) {
+      ieSnapshot();
+      const size = Number(ieText.dataset.size);
+      iectx.font = `bold ${size}px Segoe UI, sans-serif`;
+      iectx.textBaseline = 'middle';
+      iectx.lineWidth = Math.max(2, size / 8);
+      iectx.strokeStyle = ieColor === '#000000' ? '#ffffff' : '#000000';
+      iectx.fillStyle = ieColor;
+      iectx.strokeText(t, Number(ieText.dataset.x), Number(ieText.dataset.y));
+      iectx.fillText(t, Number(ieText.dataset.x), Number(ieText.dataset.y));
+    }
+    ieText.remove();
+    ieText = null;
+  }
+
+  document.getElementById('ieRotate').addEventListener('click', () => {
+    commitText(true);
+    clearCrop();
+    ieSnapshot();
+    const tmp = document.createElement('canvas');
+    tmp.width = ieCanvas.width; tmp.height = ieCanvas.height;
+    tmp.getContext('2d').drawImage(ieCanvas, 0, 0);
+    ieSetSize(tmp.height, tmp.width);
+    iectx.save();
+    iectx.translate(ieCanvas.width, 0);
+    iectx.rotate(Math.PI / 2);
+    iectx.drawImage(tmp, 0, 0);
+    iectx.restore();
+  });
+  document.getElementById('ieUndo').addEventListener('click', ieUndo);
+
+  function openEditor(item) {
+    const img = new Image();
+    img.onload = () => {
+      ieItem = item;
+      ieHistory = [];
+      // keep big screenshots manageable; WhatsApp/Telegram shrink them anyway
+      const k = Math.min(1, 2560 / Math.max(img.width, img.height));
+      ieSetSize(Math.round(img.width * k), Math.round(img.height * k));
+      iectx.drawImage(img, 0, 0, ieCanvas.width, ieCanvas.height);
+      setTool('paint');
+      editor.hidden = false;
+    };
+    img.src = item.dataUrl;
+  }
+  function closeEditor(save) {
+    commitText(save);
+    if (save && ieItem) {
+      ieItem.dataUrl = ieCanvas.toDataURL('image/png');
+      ieItem.type = 'image/png';
+      renderAttachments();
+    }
+    ieItem = null;
+    editor.hidden = true;
+    inputEl.focus();
+  }
+  document.getElementById('ieDone').addEventListener('click', () => closeEditor(true));
+  document.getElementById('ieCancel').addEventListener('click', () => closeEditor(false));
+  document.addEventListener('keydown', (e) => {
+    if (editor.hidden) return;
+    if (ieText && e.target === ieText) return; // the text box handles its own keys
+    if (e.key === 'Escape') { e.preventDefault(); ieCrop ? clearCrop() : closeEditor(false); }
+    else if (e.key === 'Enter' && ieCrop) { e.preventDefault(); applyCrop(); }
+    else if (e.key === 'Enter') { e.preventDefault(); closeEditor(true); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); ieUndo(); }
+  }, true);
 
   sendBtn.addEventListener('click', send);
   document.getElementById('sendFilesBtn').addEventListener('click', sendFile);

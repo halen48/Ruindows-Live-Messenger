@@ -53,9 +53,8 @@ class TelegramService extends EventEmitter {
   _load() {
     try {
       const raw = fs.readFileSync(this.stateFile);
-      const json = this.safeStorage?.isEncryptionAvailable()
-        ? this.safeStorage.decryptString(raw)
-        : raw.toString('utf8');
+      // plain JSON (no keyring when it was saved) or safeStorage ciphertext
+      const json = raw[0] === 0x7b ? raw.toString('utf8') : this.safeStorage.decryptString(raw);
       return JSON.parse(json);
     } catch {
       return { apiId: null, apiHash: null, session: '' };
@@ -108,6 +107,10 @@ class TelegramService extends EventEmitter {
    * true if already logged in, false if a fresh login is needed.
    */
   async resume() {
+    // read again now that the app is ready: on Linux the keyring behind
+    // safeStorage isn't available when the service is built, so the
+    // encrypted file looked unreadable and the session seemed gone
+    this.state = this._load();
     if (!this.state.session) return false;
     try {
       this.client = this._newClient();

@@ -39,6 +39,12 @@ class TelegramService extends EventEmitter {
   constructor({ stateFile, safeStorage } = {}) {
     super();
     this.stateFile = stateFile;
+    // downloaded photos/videos, next to the session file
+    this.mediaDir = stateFile ? path.join(path.dirname(stateFile), 'media') : null;
+    // gramjs messages with media, by UI id, so the window can ask to download
+    this.rawMedia = new Map();
+    // resolves once a saved session finished connecting (or turned out invalid)
+    this.ready = new Promise((r) => { this._setReady = r; });
     this.safeStorage = safeStorage || null;
     this.client = null;
     this.entities = new Map(); // peerId (string) -> gramjs entity
@@ -107,6 +113,12 @@ class TelegramService extends EventEmitter {
    * true if already logged in, false if a fresh login is needed.
    */
   async resume() {
+    const ok = await this._resume();
+    this._setReady(ok);
+    return ok;
+  }
+
+  async _resume() {
     // read again now that the app is ready: on Linux the keyring behind
     // safeStorage isn't available when the service is built, so the
     // encrypted file looked unreadable and the session seemed gone
@@ -342,11 +354,21 @@ class TelegramService extends EventEmitter {
     return name ? `\u{1F4CE} ${name}` : '\u{1F4CE} Arquivo';
   }
 
+  // photos/videos/stickers the chat window shows inline (same shape as WhatsApp)
+  _inlineMedia(m) {
+    if (m.photo) return 'image';
+    if (m.sticker && !/tgs|webm/.test(m.file?.mimeType || '')) return 'sticker';
+    if ((m.video || m.gif) && !m.videoNote) return 'video';
+    return null;
+  }
+
   /** sender: the resolved author (gramjs entity), for group "X diz:". */
   _toUi(jid, m, sender = m.sender) {
     const caption = m.message || '';
-    const label = this._mediaLabel(m);
-    const text = caption && label ? `${label}\n${caption}` : caption || label;
+    const media = this._inlineMedia(m);
+    const label = media ? '' : this._mediaLabel(m);
+    const text = media ? caption || (media === 'video' ? '\u{1F3AC} <vídeo>' : '\u{1F4F7} <foto>') : caption && label ? `${label}\n${caption}` : caption || label;
+    if (media) this.rawMedia.set(`${jid}:${m.id}`, m);
     const name = m.out ? null : (this._entityName(sender) || undefined);
     return {
       id: `${jid}:${m.id}`,
@@ -359,6 +381,7 @@ class TelegramService extends EventEmitter {
       // the group window reads the author from senderNick
       senderNick: name,
       senderJid: sender?.id != null ? `${JID_PREFIX}${String(sender.id?.value ?? sender.id)}` : undefined,
+      ...(media ? { media, caption: caption || undefined, duration: m.video?.attributes?.find?.((a) => a.duration)?.duration } : {}),
     };
   }
 
@@ -370,6 +393,8 @@ class TelegramService extends EventEmitter {
   }
 
   async getMessages(jid, limit = 40) {
+    // window opened while the saved session is still connecting: wait for it
+    if (!this.me && this.state.session) await Promise.race([this.ready, new Promise((r) => setTimeout(r, 20000))]);
     if (!this.client) return [];
     try {
       const ent = await this._entity(jid);
@@ -387,6 +412,37 @@ class TelegramService extends EventEmitter {
     const ent = await this._entity(jid);
     const sent = await this.client.sendMessage(ent, { message: text });
     return this._toUi(jid, sent);
+  }
+
+  _mediaFile(id, m) {
+    const ext = m.photo ? 'jpg' : m.sticker ? 'webp' : 'mp4';
+    return path.join(this.mediaDir, `${String(id).replace(/[^\w-]/g, '')}.${ext}`);
+  }
+
+  /** Already-downloaded file for a message id, without downloading. */
+  cachedMedia(id) {
+    const m = this.rawMedia.get(id);
+    if (!m || !this.mediaDir) return null;
+    const file = this._mediaFile(id, m);
+    return fs.existsSync(file) ? file : null;
+  }
+
+  /** Download a photo/video/sticker the window asked for; returns the file path. */
+  async getMedia(id) {
+    const m = this.rawMedia.get(id);
+    if (!m || !this.client || !this.mediaDir) return null;
+    const file = this._mediaFile(id, m);
+    if (fs.existsSync(file)) return file;
+    try {
+      const buf = await this.client.downloadMedia(m, {});
+      if (!buf?.length) return null;
+      fs.mkdirSync(this.mediaDir, { recursive: true });
+      fs.writeFileSync(file, buf);
+      return file;
+    } catch (e) {
+      if (process.env.MSN_DEBUG) console.log('[tg] media download failed:', e?.message);
+      return null;
+    }
   }
 
   /** Send a picture (pasted/drawn) as a Telegram photo. */

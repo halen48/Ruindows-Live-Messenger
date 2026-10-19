@@ -524,7 +524,7 @@ ipcMain.handle('assets:original', () => {
 
 ipcMain.handle('wa:getRoster', () => fullRoster());
 ipcMain.handle('wa:media', async (_e, id) => {
-  const file = await wa.getMedia?.(id);
+  const file = isTgJid(id) ? await tg.getMedia(id) : await wa.getMedia?.(id);
   return file ? require('url').pathToFileURL(file).href : null;
 });
 ipcMain.handle('ui:getStatus', () => myStatus);
@@ -743,7 +743,8 @@ ipcMain.on('ui:openExternal', (_e, url) => {
   // downloaded chat photos/videos open in the system viewer
   if (/^file:\/\//.test(url) && wa?.mediaDir) {
     const file = require('url').fileURLToPath(url);
-    if (file.startsWith(path.resolve(wa.mediaDir) + path.sep)) shell.openPath(file);
+    const dirs = [wa.mediaDir, tg?.mediaDir].filter(Boolean).map((d) => path.resolve(d) + path.sep);
+    if (dirs.some((d) => file.startsWith(d))) shell.openPath(file);
   }
 });
 
@@ -783,7 +784,7 @@ ipcMain.handle('ui:clearMedia', () => {
   return storage.usage(wa.mediaDir);
 });
 ipcMain.handle('wa:mediaCached', (_e, id) => {
-  const file = wa?.cachedMedia?.(id);
+  const file = isTgJid(id) ? tg.cachedMedia(id) : wa?.cachedMedia?.(id);
   return file ? require('url').pathToFileURL(file).href : null;
 });
 

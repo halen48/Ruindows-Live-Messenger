@@ -608,11 +608,16 @@
     const r = await window.msn.aiImportFirefox();
     const overlay = document.createElement('div');
     overlay.className = 'xp-dialog-overlay';
+    const geminiOff = !r.error && !r.loggedIn.includes('Gemini');
+    const why = !geminiOff ? ''
+      : r.google === false
+        ? `<br><br>O Gemini ficou de fora: o Firefox (perfil ${escapeHtml(r.profile || '?')}) não está logado no Google. Entre no gmail.com pelo Firefox e tente de novo.`
+        : '<br><br>O login do Google veio do Firefox, mas o Gemini não aceitou. Abra gemini.google.com no Firefox uma vez e tente de novo.';
     const msg = r.error
       ? `Não deu para usar o login do Firefox: ${escapeHtml(r.error)}.`
-      : r.loggedIn.length
+      : (r.loggedIn.length
         ? `Pronto! Logado em: ${escapeHtml(r.loggedIn.join(', '))}.`
-        : 'Copiei o login do Firefox, mas nenhuma IA ficou logada. Entre nelas no Firefox e tente de novo.';
+        : 'Copiei o login do Firefox, mas nenhuma IA ficou logada. Entre nelas no Firefox e tente de novo.') + why;
     overlay.innerHTML = `
       <div class="xp-dialog">
         <div class="xp-dialog-title">Login do Firefox</div>

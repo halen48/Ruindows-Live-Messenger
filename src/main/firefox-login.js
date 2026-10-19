@@ -57,7 +57,7 @@ async function readCookies(file) {
   const db = new SQL.Database(fs.readFileSync(file));
   try {
     const where = DOMAINS.map(() => 'host LIKE ?').join(' OR ');
-    const stmt = db.prepare(`SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies WHERE ${where}`);
+    const stmt = db.prepare(`SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite, originAttributes FROM moz_cookies WHERE (${where})`);
     stmt.bind(DOMAINS.map((d) => `%${d}`));
     const rows = [];
     while (stmt.step()) rows.push(stmt.getAsObject());
@@ -69,6 +69,36 @@ async function readCookies(file) {
 }
 
 /**
+ * Firefox keeps several copies of the same cookie: the real first-party one,
+ * one per container ("^userContextId=N"), and with Total Cookie Protection one
+ * per site that embeds Google ("^partitionKey=..."), which is usually a
+ * logged-out visitor. Copying them all let a partitioned copy overwrite the
+ * real session (Gemini never logged in while Claude did). So: only
+ * unpartitioned cookies, from the default jar, or from the container that
+ * actually holds the Google login if the default one doesn't.
+ */
+function pickJar(rows) {
+  const jars = new Map();
+  for (const r of rows) {
+    const oa = String(r.originAttributes || '');
+    if (/partitionKey=/.test(oa)) continue;
+    if (!jars.has(oa)) jars.set(oa, []);
+    jars.get(oa).push(r);
+  }
+  const loggedIn = (list) => list.some((r) => /google\.com$/.test(r.host) && /^(__Secure-[13]PSID|SID)$/.test(r.name));
+  const def = jars.get('') || [];
+  if (loggedIn(def) || jars.size <= 1) return def;
+  const withGoogle = [...jars.entries()].filter(([, list]) => loggedIn(list));
+  if (!withGoogle.length) return def;
+  // the default jar still wins for the other sites; the container adds Google
+  const [, container] = withGoogle[0];
+  const key = (r) => `${r.host}|${r.path}|${r.name}`;
+  const merged = new Map(def.map((r) => [key(r), r]));
+  for (const r of container) if (/google\.com$/.test(r.host)) merged.set(key(r), r);
+  return [...merged.values()];
+}
+
+/**
  * Copy the cookies into an Electron session. Resolves with how many were
  * copied and from which profile, or throws if there's nothing to use.
  */
@@ -77,9 +107,10 @@ async function importFirefoxLogin(session) {
   if (!files.length) throw new Error('não achei o Firefox neste PC');
   const now = Date.now() / 1000;
   for (const { file, profile } of files) {
-    const rows = await readCookies(file);
+    const rows = pickJar(await readCookies(file));
     if (!rows.length) continue;
     let copied = 0;
+    const failed = [];
     for (const r of rows) {
       if (SKIP.test(r.name)) continue;
       // newer Firefox stores the expiry in milliseconds
@@ -95,6 +126,8 @@ async function importFirefoxLogin(session) {
         httpOnly: !!r.isHttpOnly,
         sameSite: ['no_restriction', 'lax', 'strict'][r.sameSite] || 'lax',
       };
+      // Chromium refuses SameSite=None without Secure
+      if (cookie.sameSite === 'no_restriction' && !cookie.secure) cookie.sameSite = 'lax';
       if (expiry) cookie.expirationDate = expiry;
       // __Host- cookies must not name a domain; dotted hosts cover subdomains
       if (r.host.startsWith('.') && !r.name.startsWith('__Host-')) cookie.domain = r.host;
@@ -102,11 +135,13 @@ async function importFirefoxLogin(session) {
         await session.cookies.set(cookie);
         copied++;
       } catch {
-        /* a cookie Chromium won't take; skip it */
+        // a cookie Chromium won't take: only its name is kept, for the message
+        failed.push(r.name);
       }
     }
     await session.cookies.flushStore();
-    return { copied, profile };
+    const google = rows.some((r) => /google\.com$/.test(r.host) && /^(__Secure-[13]PSID|SID)$/.test(r.name));
+    return { copied, profile, google, failed: failed.length };
   }
   throw new Error('o Firefox não tem login no Google nem nessas IAs');
 }

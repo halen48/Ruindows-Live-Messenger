@@ -3,15 +3,20 @@
 /**
  * Instagram DMs, personal account, through Instagram's own website.
  *
- * There's no official API for personal DMs. Instead of an unofficial client
- * that would need (and store) the password, the app keeps instagram.com open
- * in a hidden window, in its own session: I log in on the real site once, and
- * the app reads and sends DMs with the same web calls the site itself makes.
- * No password is ever handled here; the session lives in the app's cookie
- * store, like the AI sites.
+ * There's no official API for personal DMs, and the old /api/v1/direct_v2/
+ * calls are gone from the web (404). The site now reads DMs with GraphQL
+ * queries (PolarisDirectInboxQuery for the list, IGDThreadDetailQuery for a
+ * conversation) and sends them over its own socket. So:
+ *   - reading: the app opens instagram.com/direct/inbox/ once in a hidden
+ *     window, keeps a copy of the queries the page itself sends (with the
+ *     session's tokens) and repeats them from inside the site when it needs
+ *     the list or a conversation;
+ *   - sending: the hidden window opens the conversation and types into the
+ *     message box, exactly like I would.
+ * No password is handled here: I log in on the real site once and the
+ * session stays in the app's own cookie store, like the AI sites.
  *
- * New messages are picked up by polling the inbox (the site uses a socket we
- * don't speak), every POLL_MS.
+ * New messages are picked up by repeating the inbox query every POLL_MS.
  */
 const { EventEmitter } = require('events');
 const fs = require('fs');
@@ -23,11 +28,12 @@ const JID_PREFIX = 'ig:';
 const isIgJid = (jid) => typeof jid === 'string' && jid.startsWith(JID_PREFIX);
 const PARTITION = 'persist:instagram';
 const ORIGIN = 'https://www.instagram.com';
-// a tiny same-origin page: calls run from it with the site's cookies and
-// headers, without keeping the whole (heavy) Instagram app running
-const API_PAGE = `${ORIGIN}/robots.txt`;
-const APP_ID = '936619743392459'; // the web app's public id, sent by the site on every call
+// a tiny same-origin page to run calls from while the heavy app isn't needed
+const IDLE_PAGE = `${ORIGIN}/robots.txt`;
+const APP_ID = '936619743392459'; // the web app's public id, sent by the site on every REST call
 const POLL_MS = 20000;
+const IDLE_MS = 60000;
+const QUERIES = ['PolarisDirectInboxQuery', 'IGDThreadDetailQuery'];
 
 // shortcode (the "C3xY..." in /reel/C3xY.../) -> numeric media id
 const SC_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -41,33 +47,104 @@ function shortcodeToId(code) {
   return id.toString();
 }
 const REEL_RE = /instagram\.com\/(?:[\w.]+\/)?(?:reels?|p|tv)\/([\w-]{5,})/i;
-
-// in-page call: same origin, so the browser adds cookies, Origin, Sec-Fetch-*
-const CALL = `async (method, url, body) => {
-  const csrf = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || '';
-  const headers = { 'X-IG-App-ID': '${APP_ID}', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf };
-  if (body) headers['Content-Type'] = 'application/x-www-form-urlencoded';
-  const r = await fetch(url, { method, headers, body: body || undefined, credentials: 'include' });
-  return { status: r.status, text: await r.text() };
-}`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class InstagramService extends EventEmitter {
   constructor({ mediaDir } = {}) {
     super();
     this.mediaDir = mediaDir || null;
     this.chats = [];
-    this.threads = new Map(); // thread id -> last inbox entry
-    this.lastItem = new Map(); // thread id -> newest item id already seen
-    this.rawMedia = new Map(); // UI message id -> { url, kind }
+    this.threads = new Map(); // thread_id -> latest thread object
+    this.lastTs = new Map(); // thread_id -> newest message time already seen
+    this.rawMedia = new Map(); // UI message id -> { url, kind, thumb }
     this.avatars = new Map(); // jid -> data URL
-    this.me = null; // { pk, username, name }
+    this.q = {}; // friendly name -> captured request body
+    this.me = null; // { fbid, name }
+    this.sendQueue = Promise.resolve();
   }
 
   owns(jid) { return isIgJid(jid); }
   get ses() { return session.fromPartition(PARTITION); }
 
   status() {
-    return { loggedIn: !!this.me, name: this.me?.name || this.me?.username || null };
+    return { loggedIn: !!this.me, name: this.me?.name || null };
+  }
+
+  // ---- the hidden window ------------------------------------------------------
+
+  _win() {
+    if (this.win && !this.win.isDestroyed()) return this.win;
+    this.win = new BrowserWindow({ show: false, width: 1100, height: 800, webPreferences: { partition: PARTITION } });
+    useLoginFriendlyAgent(this.win.webContents);
+    // keep a copy of the GraphQL queries the site sends (they carry the
+    // session's current tokens), to repeat them later
+    if (!this.hooked) {
+      this.hooked = true;
+      this.ses.webRequest.onBeforeRequest({ urls: [`${ORIGIN}/api/graphql*`] }, (d, cb) => {
+        try {
+          const body = Buffer.concat((d.uploadData || []).map((u) => u.bytes || Buffer.alloc(0))).toString();
+          const name = (body.match(/fb_api_req_friendly_name=([^&]+)/) || [])[1];
+          if (QUERIES.includes(name)) this.q[name] = body;
+        } catch {}
+        cb({});
+      });
+    }
+    this.loaded = this.win.loadURL(IDLE_PAGE).catch(() => {});
+    return this.win;
+  }
+
+  async _go(url) {
+    const win = this._win();
+    await this.loaded;
+    clearTimeout(this.idleTimer);
+    if (win.webContents.getURL() !== url) {
+      this.loaded = win.loadURL(url).catch(() => {});
+      await this.loaded;
+    }
+    // the full Instagram app is heavy: back to a blank page when idle
+    this.idleTimer = setTimeout(() => {
+      if (!this.win.isDestroyed() && this.win.webContents.getURL() !== IDLE_PAGE) this.loaded = this.win.loadURL(IDLE_PAGE).catch(() => {});
+    }, IDLE_MS);
+    return win;
+  }
+
+  /** Open the inbox once so the site sends its queries and we can copy them. */
+  async _capture() {
+    if (QUERIES.every((n) => this.q[n])) return;
+    if (this.capturing) return this.capturing;
+    this.capturing = (async () => {
+      await this._go(`${ORIGIN}/direct/inbox/`);
+      for (let i = 0; i < 60 && !QUERIES.every((n) => this.q[n]); i++) await sleep(500);
+      if (!this.q.PolarisDirectInboxQuery) throw new Error('o Instagram não carregou a caixa de entrada');
+    })().finally(() => { this.capturing = null; });
+    return this.capturing;
+  }
+
+  async _gql(name, variables) {
+    await this._capture();
+    let body = this.q[name];
+    if (!body) throw new Error(`consulta ${name} indisponível`);
+    if (variables) {
+      const p = new URLSearchParams(body);
+      p.set('variables', JSON.stringify({ ...JSON.parse(p.get('variables') || '{}'), ...variables }));
+      body = p.toString();
+    }
+    const win = this.win;
+    await this.loaded;
+    const text = await win.webContents.executeJavaScript(
+      `fetch('/api/graphql', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: ${JSON.stringify(body)}, credentials: 'include' }).then((r) => r.text())`,
+      true
+    );
+    let json;
+    try { json = JSON.parse(String(text).split('\n')[0]); } catch {
+      // tokens expired or logged out: copy the queries again next time
+      this.q = {};
+      const err = new Error('resposta inesperada do Instagram');
+      err.loggedOut = !(await this._hasSession());
+      throw err;
+    }
+    if (json.errors?.length && !json.data) { this.q = {}; throw new Error(json.errors[0].message || 'erro do Instagram'); }
+    return json.data;
   }
 
   // ---- session ---------------------------------------------------------------
@@ -75,27 +152,6 @@ class InstagramService extends EventEmitter {
   async _hasSession() {
     const c = await this.ses.cookies.get({ url: ORIGIN, name: 'sessionid' });
     return !!c[0]?.value;
-  }
-
-  _apiWin() {
-    if (this.win && !this.win.isDestroyed()) return this.win;
-    this.win = new BrowserWindow({ show: false, webPreferences: { partition: PARTITION, backgroundThrottling: false } });
-    useLoginFriendlyAgent(this.win.webContents);
-    this.ready = this.win.loadURL(API_PAGE).catch(() => {});
-    return this.win;
-  }
-
-  async _call(method, url, form) {
-    const win = this._apiWin();
-    await this.ready;
-    const body = form ? new URLSearchParams(form).toString() : null;
-    const r = await win.webContents.executeJavaScript(`(${CALL})(${JSON.stringify(method)}, ${JSON.stringify(url)}, ${JSON.stringify(body)})`, true);
-    if (r.status === 401 || r.status === 403 || /"require_login":\s*true|login_required/.test(r.text)) {
-      const err = new Error('sessão do Instagram expirou');
-      err.loggedOut = true;
-      throw err;
-    }
-    try { return JSON.parse(r.text); } catch { throw new Error(`resposta inesperada (${r.status})`); }
   }
 
   /** On startup: pick the saved session back up, quietly. */
@@ -123,8 +179,7 @@ class InstagramService extends EventEmitter {
 
   async _start() {
     try {
-      const pk = (await this.ses.cookies.get({ url: ORIGIN, name: 'ds_user_id' }))[0]?.value;
-      this.me = { pk: String(pk || ''), username: null, name: null };
+      this.me = { fbid: null, name: null };
       await this.refresh(true);
       if (!this.me) return false;
       clearInterval(this.poll);
@@ -143,7 +198,8 @@ class InstagramService extends EventEmitter {
     this.me = null;
     this.chats = [];
     this.threads.clear();
-    this.lastItem.clear();
+    this.lastTs.clear();
+    this.q = {};
     await this.ses.clearStorageData().catch(() => {});
     if (this.win && !this.win.isDestroyed()) this.win.destroy();
     this.win = null;
@@ -155,189 +211,191 @@ class InstagramService extends EventEmitter {
 
   async refresh(first = false) {
     if (!this.me) return;
-    let inbox;
+    let data;
     try {
-      inbox = await this._call('GET', '/api/v1/direct_v2/inbox/?persistentBadging=true&folder=&limit=40&thread_message_limit=10');
+      data = await this._gql('PolarisDirectInboxQuery');
     } catch (e) {
       if (process.env.MSN_DEBUG) console.log('[ig] inbox failed:', e?.message);
-      if (e.loggedOut) { this.me = null; clearInterval(this.poll); this.emit('login', { ...this.status(), error: e.message }); }
+      if (e.loggedOut) { this.me = null; clearInterval(this.poll); this.emit('login', { ...this.status(), error: 'sessão do Instagram expirou' }); }
+      if (first) throw e;
       return;
     }
-    const viewer = inbox.viewer || {};
-    if (viewer.pk) this.me = { pk: String(viewer.pk), username: viewer.username, name: viewer.full_name || viewer.username };
-    const threads = inbox.inbox?.threads || [];
-    const presence = await this._presence().catch(() => ({}));
+    const edges = data?.get_slide_mailbox_for_iris_subscription?.threads_by_folder?.edges || [];
     const chats = [];
-    for (const t of threads) {
+    for (const { node } of edges) {
+      const t = node?.as_ig_direct_thread;
+      if (!t) continue;
       const id = String(t.thread_id);
-      this.threads.set(id, t);
+      this.threads.set(id, { ...this.threads.get(id), ...t });
+      if (!this.me.fbid && t.viewer?.interop_messaging_user_fbid) this.me.fbid = String(t.viewer.interop_messaging_user_fbid);
       const jid = JID_PREFIX + id;
-      const isGroup = !!t.is_group;
+      const msgs = this._sorted(t);
+      const theirs = msgs.filter((m) => !this._isMine(m));
+      // unread: their messages after my read receipt (or "marked as unread")
+      const myMark = Number((t.slide_read_receipts || []).find((r) => String(r.participant_fbid) === this.me.fbid)?.watermark_timestamp_ms || 0);
+      const unread = theirs.filter((m) => Number(m.timestamp_ms) > myMark).length || (t.marked_as_unread ? 1 : 0);
       const other = (t.users || [])[0];
-      const pres = isGroup || !other ? { presence: 'available', lastIncoming: null } : this._presenceOf(presence[other.pk]);
+      // no "active now" on the web for this account: the same rule WhatsApp
+      // uses without presence, by when they last wrote
+      const lastTheirs = theirs.length ? Math.floor(Number(theirs[theirs.length - 1].timestamp_ms) / 1000) : 0;
       chats.push({
         jid,
         source: 'instagram',
         name: t.thread_title || (t.users || []).map((u) => u.full_name || u.username).join(', ') || 'Instagram',
-        isGroup,
-        unread: t.read_state === 1 ? 1 : 0,
-        presence: pres.presence,
-        lastIncoming: pres.lastIncoming,
-        about: other && !isGroup ? `@${other.username}` : '',
+        isGroup: !!t.is_group,
+        unread,
+        presence: t.is_group ? 'available' : 'unavailable',
+        lastIncoming: t.is_group ? null : lastTheirs,
+        lastTimestamp: Math.floor(Number(t.last_activity_timestamp_ms || 0) / 1000),
+        about: other && !t.is_group ? `@${other.username}` : '',
         pinned: !!t.is_pin,
       });
       // new messages since the last look become notifications
-      const items = t.items || [];
-      const seen = this.lastItem.get(id);
-      if (items[0]) this.lastItem.set(id, String(items[0].item_id));
+      const newest = msgs.length ? Number(msgs[msgs.length - 1].timestamp_ms) : 0;
+      const seen = this.lastTs.get(id);
+      this.lastTs.set(id, Math.max(newest, seen || 0));
       if (first || seen === undefined) continue;
-      const fresh = [];
-      for (const it of items) {
-        if (String(it.item_id) === seen) break;
-        fresh.push(it);
-      }
-      for (const it of fresh.reverse()) {
-        const ui = this._toUi(jid, it, t);
-        if (!ui.fromMe && ui.text) this.emit('message', ui);
+      for (const m of msgs) {
+        if (Number(m.timestamp_ms) <= seen || this._isMine(m)) continue;
+        const ui = this._toUi(jid, m, t);
+        if (ui.text || ui.media) this.emit('message', ui);
       }
     }
     this.chats = chats;
     this.emit('roster', this.getRoster());
   }
 
-  async _presence() {
-    const r = await this._call('GET', '/api/v1/direct_v2/get_presence/');
-    return r.user_presence || {};
-  }
-
-  // same rule as WhatsApp/Telegram: active = online, otherwise a "last seen"
-  // the list turns into away/offline by age
-  _presenceOf(p) {
-    if (!p) return { presence: 'unavailable', lastIncoming: 0 };
-    if (p.is_active) return { presence: 'available', lastIncoming: Math.floor(Date.now() / 1000) };
-    return { presence: 'unavailable', lastIncoming: Math.floor((p.last_activity_at_ms || 0) / 1000) };
-  }
-
   getRoster() { return this.chats; }
   _idOf(jid) { return jid.slice(JID_PREFIX.length); }
 
+  _sorted(t) {
+    return (t.slide_messages?.edges || []).map((e) => e.node).filter(Boolean)
+      .sort((a, b) => Number(a.timestamp_ms) - Number(b.timestamp_ms));
+  }
+
+  _isMine(m) { return !!this.me?.fbid && String(m.sender_fbid) === this.me.fbid; }
+
   // ---- messages --------------------------------------------------------------
 
-  _userName(t, pk) {
-    const u = (t?.users || []).find((x) => String(x.pk) === String(pk));
+  _senderName(t, m) {
+    if (m.sender?.name) return m.sender.name;
+    const u = (t?.users || []).find((x) => String(x.interop_messaging_user_fbid) === String(m.sender_fbid));
     return u ? u.full_name || u.username : null;
   }
 
-  // the picture/video inside a post, reel or DM photo
-  _mediaOf(m) {
-    if (!m) return null;
-    const c = m.carousel_media?.[0] || m;
-    const image = c.image_versions2?.candidates?.[0]?.url;
-    const video = c.video_versions?.[0]?.url;
-    return { image, video, code: m.code, user: m.user?.username, caption: m.caption?.text || '', duration: Math.round(c.video_duration || 0) };
+  // first picture URL anywhere inside a message's content
+  _findImage(v, depth = 0) {
+    if (!v || typeof v !== 'object' || depth > 6) return null;
+    if (typeof v.url === 'string' && /^https?:/.test(v.url)) return v.url;
+    for (const [k, x] of Object.entries(v)) {
+      if (k === 'header_icon' || k === 'favicon') continue;
+      const u = this._findImage(x, depth + 1);
+      if (u) return u;
+    }
+    return null;
   }
 
-  _toUi(jid, it, t = this.threads.get(this._idOf(jid))) {
-    const fromMe = String(it.user_id) === this.me?.pk;
+  _toUi(jid, m, t = this.threads.get(this._idOf(jid))) {
+    const fromMe = this._isMine(m);
     const ui = {
-      id: `${jid}:${it.item_id}`,
+      id: `${jid}:${m.message_id || m.id}`,
       chatJid: jid,
       fromMe,
       text: '',
       isNudge: false,
-      timestamp: Math.floor(Number(it.timestamp) / 1000) || Date.now(),
-      senderName: fromMe ? null : this._userName(t, it.user_id) || undefined,
+      timestamp: Number(m.timestamp_ms) || Date.now(),
+      senderName: fromMe ? null : this._senderName(t, m) || undefined,
     };
     ui.senderNick = ui.senderName;
-    const media = (m, label) => {
-      const x = this._mediaOf(m);
-      if (!x) return (ui.text = label);
-      const link = x.code ? `${ORIGIN}/${m.product_type === 'clips' || it.item_type === 'clip' ? 'reel' : 'p'}/${x.code}/` : '';
-      if (x.video || x.image) {
-        this.rawMedia.set(ui.id, { url: x.video || x.image, kind: x.video ? 'video' : 'image', thumb: x.image });
-        ui.media = x.video ? 'video' : 'image';
-        ui.duration = x.duration || undefined;
-        ui.thumbUrl = x.image;
-      }
-      // reels/posts: who posted + the link, so it can be opened on the site
-      // a plain DM photo/video shows just itself
-      if (x.user || link) ui.caption = [x.user ? `${label} de @${x.user}` : label, link].filter(Boolean).join('\n');
-      ui.text = ui.caption || label;
-    };
-    switch (it.item_type) {
-      case 'text': ui.text = it.text || ''; break;
-      case 'link': ui.text = it.link?.text || it.link?.link_context?.link_url || ''; break;
-      case 'like': ui.text = it.like || '❤️'; break;
-      case 'media': media(it.media, '📷 Foto'); if (it.media?.media_type === 2) ui.caption = ui.text = '🎬 Vídeo'; break;
-      case 'clip': media(it.clip?.clip, '🎬 Reels'); break;
-      case 'media_share': media(it.media_share, '📷 Post'); break;
-      case 'felix_share': media(it.felix_share?.video, '🎬 Vídeo'); break;
-      case 'animated_media': {
-        const url = it.animated_media?.images?.fixed_height?.url;
-        if (url) { this.rawMedia.set(ui.id, { url, kind: 'image' }); ui.media = 'image'; }
-        ui.text = 'GIF';
-        break;
-      }
-      case 'voice_media': ui.text = '🎵 Áudio'; break;
-      case 'raven_media': case 'visual_media': ui.text = '📷 Foto temporária (abra no celular)'; break;
-      case 'story_share': ui.text = '📖 Story compartilhado'; break;
-      case 'reel_share': ui.text = [it.reel_share?.text, '(resposta ao story)'].filter(Boolean).join(' '); break;
-      case 'action_log': ui.text = `<${it.action_log?.description || 'ação'}>`; break;
-      case 'placeholder': ui.text = it.placeholder?.message || '<mensagem indisponível>'; break;
-      default: {
-        // newer "XMA" shares (reels, posts, links): keep the link; the window
-        // turns an instagram.com/reel/ link into a preview with the video
-        const xma = Object.keys(it).find((k) => k.startsWith('xma_') && Array.isArray(it[k]) && it[k][0]);
-        if (xma) {
-          const x = it[xma][0];
-          const what = /clip|reel/.test(xma) ? '🎬 Reels' : /story/.test(xma) ? '📖 Story' : '🔗';
-          ui.text = [`${what}${x.header_title_text ? ` de ${x.header_title_text}` : ''}`, x.title_text, x.target_url].filter(Boolean).join('\n');
-        } else {
-          ui.text = `<${it.item_type || 'mensagem'}>`;
-        }
-      }
+    const c = m.content || {};
+    const kind = c.__typename || '';
+    if (kind === 'SlideMessageText') {
+      ui.text = c.text_body || '';
+    } else if (kind === 'SlideMessageAdminText') {
+      ui.text = `<${(c.text_fragments || []).map((f) => f.plaintext).join('') || 'ação'}>`;
+    } else if (c.xma) {
+      // shares: reels, posts, stories, links. The link stays in the text; a
+      // reel/post link gets the video preview in the chat window
+      const x = c.xma;
+      const url = x.target_url || '';
+      const what = /\/(reels?|tv)\//.test(url) ? '🎬 Reels' : /\/p\//.test(url) ? '📷 Post' : /stories/.test(url) ? '📖 Story' : '🔗';
+      const head = x.header_title_text ? `${what} de ${x.header_title_text}` : what;
+      ui.text = [head, c.xma_text_body, url].filter(Boolean).join('\n');
+      if (x.preview_image?.url) this.rawMedia.set(ui.id, { url: x.preview_image.url, kind: 'image', thumb: x.preview_image.url });
+    } else if (/Image|Photo/.test(kind) || m.content_type === 'IMAGES') {
+      const url = this._findImage(c);
+      if (url) { this.rawMedia.set(ui.id, { url, kind: 'image', thumb: url }); ui.media = 'image'; }
+      ui.text = url ? '📷 <foto>' : '📷 Foto (abra no celular)';
+    } else if (/Video/.test(kind) || m.content_type === 'VIDEO') {
+      ui.text = '🎬 Vídeo (abra no celular)';
+    } else if (/Audio|Voice/.test(kind) || m.content_type === 'AUDIO') {
+      ui.text = '🎵 Áudio';
+    } else if (/Sticker/.test(kind)) {
+      ui.text = 'Figurinha';
+    } else if (/Expired/.test(kind)) {
+      ui.text = '<mensagem expirada>';
+    } else {
+      ui.text = m.text_body || `<${(m.content_type || kind || 'mensagem').toLowerCase()}>`;
     }
     return ui;
   }
 
-  async getMessages(jid, limit = 40) {
+  async getMessages(jid) {
     if (!this.me) return [];
+    const t = this.threads.get(this._idOf(jid));
+    if (!t) return [];
     try {
-      const r = await this._call('GET', `/api/v1/direct_v2/threads/${this._idOf(jid)}/?limit=${limit}`);
-      const t = r.thread || {};
-      this.threads.set(this._idOf(jid), { ...this.threads.get(this._idOf(jid)), ...t });
-      return [...(t.items || [])].reverse().map((it) => this._toUi(jid, it, t)).filter((m) => m.text || m.media);
+      const data = await this._gql('IGDThreadDetailQuery', { thread_fbid: String(t.thread_fbid) });
+      const full = data?.get_slide_thread_nullable?.as_ig_direct_thread;
+      const thread = full || t;
+      return this._sorted(thread).map((m) => this._toUi(jid, m, thread)).filter((m) => m.text || m.media);
     } catch (e) {
       if (process.env.MSN_DEBUG) console.log('[ig] thread failed:', e?.message);
-      return [];
+      return this._sorted(t).map((m) => this._toUi(jid, m, t));
     }
   }
 
-  async send(jid, text) {
-    const ctx = String(BigInt(Date.now()) * 1000000n + BigInt(Math.floor(Math.random() * 1e6)));
-    const r = await this._call('POST', '/api/v1/direct_v2/threads/broadcast/text/', {
-      action: 'send_item',
-      client_context: ctx,
-      mutation_token: ctx,
-      offline_threading_id: ctx,
-      thread_ids: `[${this._idOf(jid)}]`,
-      text,
-    });
-    if (r.status !== 'ok') throw new Error(r.message || 'o Instagram recusou a mensagem');
-    const itemId = r.payload?.item_id || ctx;
-    this.lastItem.set(this._idOf(jid), String(itemId));
-    return { id: `${jid}:${itemId}`, chatJid: jid, fromMe: true, text, isNudge: false, timestamp: Date.now() };
+  /**
+   * Send by typing into the conversation in the hidden window, like I would
+   * (the site sends DMs over its own socket, which can't be replayed).
+   */
+  send(jid, text) {
+    const run = this.sendQueue.then(() => this._send(jid, text));
+    this.sendQueue = run.catch(() => {});
+    return run;
+  }
+
+  async _send(jid, text) {
+    const id = this._idOf(jid);
+    const win = await this._go(`${ORIGIN}/direct/t/${id}/`);
+    const BOX = 'div[contenteditable="true"][role="textbox"], div[contenteditable="true"][aria-label]';
+    const ok = await win.webContents.executeJavaScript(`(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      let box = null;
+      for (let i = 0; i < 60 && !box; i++) { box = document.querySelector(${JSON.stringify(BOX)}); if (!box) await sleep(250); }
+      if (!box) return false;
+      box.focus();
+      document.execCommand('insertText', false, ${JSON.stringify(text)});
+      await sleep(300);
+      return box.innerText.trim().length > 0;
+    })()`);
+    if (!ok) throw new Error('não achei a caixa de mensagem do Instagram');
+    // a real Enter, as if typed
+    for (const type of ['keyDown', 'char', 'keyUp']) win.webContents.sendInputEvent({ type, keyCode: type === 'char' ? '\r' : 'Return' });
+    const sent = await win.webContents.executeJavaScript(`(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (let i = 0; i < 40; i++) { const b = document.querySelector(${JSON.stringify(BOX)}); if (b && !b.innerText.trim()) return true; await sleep(250); }
+      return false;
+    })()`);
+    if (!sent) throw new Error('o Instagram não enviou a mensagem');
+    this.lastTs.set(id, Date.now());
+    setTimeout(() => this.refresh(), 3000);
+    return { id: `${jid}:me-${Date.now()}`, chatJid: jid, fromMe: true, text, isNudge: false, timestamp: Date.now() };
   }
 
   async markRead(jid) {
-    const id = this._idOf(jid);
-    const item = this.threads.get(id)?.items?.[0]?.item_id;
-    if (!item) return;
-    try {
-      await this._call('POST', `/api/v1/direct_v2/threads/${id}/items/${item}/seen/`, { action: 'mark_seen', thread_id: id, use_unified_inbox: 'true' });
-      const c = this.chats.find((x) => x.jid === jid);
-      if (c?.unread) { c.unread = 0; this.emit('roster', this.getRoster()); }
-    } catch {}
+    const c = this.chats.find((x) => x.jid === jid);
+    if (c?.unread) { c.unread = 0; this.emit('roster', this.getRoster()); }
   }
 
   async setTyping() {}
@@ -345,7 +403,7 @@ class InstagramService extends EventEmitter {
   async groupMembers(jid) {
     const t = this.threads.get(this._idOf(jid));
     return (t?.users || []).map((u) => ({
-      jid: `${JID_PREFIX}u${u.pk}`,
+      jid: `${JID_PREFIX}u${u.id}`,
       nick: u.full_name || u.username,
       title: `@${u.username}`,
       name: u.full_name || u.username,
@@ -373,8 +431,8 @@ class InstagramService extends EventEmitter {
   async avatar(jid) {
     if (this.avatars.has(jid)) return this.avatars.get(jid);
     const t = this.threads.get(this._idOf(jid));
-    const url = t?.is_group ? null : t?.users?.[0]?.profile_pic_url;
-    const data = url ? await this._dataUrl(url) : null;
+    const url = t?.is_group ? t?.thread_image_url : t?.users?.[0]?.profile_pic_url;
+    const data = typeof url === 'string' ? await this._dataUrl(url) : null;
     if (data) this.avatars.set(jid, data);
     return data;
   }
@@ -406,7 +464,7 @@ class InstagramService extends EventEmitter {
     }
   }
 
-  /** Still picture for a reel/post shown in a chat (a data URL, the CDN links expire). */
+  /** Still picture for a share (a data URL, the CDN links expire). */
   async thumb(id) {
     const m = this.rawMedia.get(id);
     return m?.thumb ? this._dataUrl(m.thumb) : null;
@@ -423,11 +481,21 @@ class InstagramService extends EventEmitter {
     if (!this.rawMedia.has(id)) {
       const mediaId = shortcodeToId(code);
       if (!mediaId) return null;
+      this._win();
+      await this.loaded;
       let info;
-      try { info = await this._call('GET', `/api/v1/media/${mediaId}/info/`); } catch { return null; }
-      const x = this._mediaOf(info.items?.[0]);
-      if (!x || !(x.video || x.image)) return null;
-      this.rawMedia.set(id, { url: x.video || x.image, kind: x.video ? 'video' : 'image', thumb: x.image, user: x.user, caption: x.caption, duration: x.duration });
+      try {
+        info = JSON.parse(await this.win.webContents.executeJavaScript(
+          `fetch('/api/v1/media/${mediaId}/info/', { headers: { 'X-IG-App-ID': '${APP_ID}', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || '' }, credentials: 'include' }).then((r) => r.text())`,
+          true
+        ));
+      } catch { return null; }
+      const it = info?.items?.[0];
+      const c = it?.carousel_media?.[0] || it;
+      const image = c?.image_versions2?.candidates?.[0]?.url;
+      const video = c?.video_versions?.[0]?.url;
+      if (!image && !video) return null;
+      this.rawMedia.set(id, { url: video || image, kind: video ? 'video' : 'image', thumb: image, user: it.user?.username, caption: it.caption?.text || '', duration: Math.round(c.video_duration || 0) });
     }
     const m = this.rawMedia.get(id);
     return { id, media: m.kind, thumb: await this._dataUrl(m.thumb), user: m.user, caption: (m.caption || '').slice(0, 200), duration: m.duration || undefined };

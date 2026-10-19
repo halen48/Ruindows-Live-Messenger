@@ -356,6 +356,32 @@ class InstagramService extends EventEmitter {
   }
 
   /**
+   * Start (or find) the conversation with @username: Instagram's own
+   * ig.me/m/<user> link opens it; the thread id comes from where it lands.
+   */
+  async startChat(username) {
+    const user = String(username || '').trim().replace(/^@/, '').replace(/[^\w.]/g, '');
+    if (!user) throw new Error('nome de usuário vazio');
+    if (!this.me) throw new Error('entre no Instagram primeiro');
+    const known = this.chats.find((c) => c.about.toLowerCase() === `@${user.toLowerCase()}`);
+    if (known) return known.jid;
+    const win = await this._go(`https://ig.me/m/${user}`);
+    let id = null;
+    for (let i = 0; i < 40 && !id; i++) {
+      id = (win.webContents.getURL().match(/\/direct\/t\/(\d+)/) || [])[1];
+      if (!id) await sleep(250);
+    }
+    if (!id) throw new Error(`não achei @${user} no Instagram`);
+    // shows up in the list right away, filled in properly by the next refresh
+    if (!this.chats.some((c) => c.jid === JID_PREFIX + id)) {
+      this.chats.push({ jid: JID_PREFIX + id, source: 'instagram', name: `@${user}`, isGroup: false, unread: 0, presence: 'unavailable', lastIncoming: 0, about: `@${user}`, pinned: false });
+      this.emit('roster', this.getRoster());
+    }
+    setTimeout(() => this.refresh(), 2000);
+    return JID_PREFIX + id;
+  }
+
+  /**
    * Send by typing into the conversation in the hidden window, like I would
    * (the site sends DMs over its own socket, which can't be replayed).
    */

@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('msn', {
   igStatus: () => ipcRenderer.invoke('ig:status'),
   igLogin: () => ipcRenderer.invoke('ig:login'),
   igLogout: () => ipcRenderer.invoke('ig:logout'),
+  igStartChat: (user) => ipcRenderer.invoke('ig:startChat', user),
   igLinkPreview: (url) => ipcRenderer.invoke('ig:linkPreview', url),
   igThumb: (id) => ipcRenderer.invoke('ig:thumb', id),
   themeGet: () => ipcRenderer.sendSync('ui:themeGet'),

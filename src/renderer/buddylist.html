@@ -1058,6 +1058,7 @@
       { label: 'Adicionar contato do WhatsApp...', action: addPhoneContact },
       { label: tg.loggedIn ? `Sair do Telegram (${tg.name || 'conectado'})` : 'Entrar no Telegram...', action: () => (tg.loggedIn ? window.msn.tgLogout() : telegramLoginDialog()) },
       // Instagram: its own site opens; once I'm in, the window closes by itself
+      ...(ig.loggedIn ? [{ label: 'Conversar com alguém do Instagram...', action: addInstagramContact }] : []),
       { label: ig.loggedIn ? `Sair do Instagram (${ig.name || 'conectado'})` : 'Entrar no Instagram...', action: () => (ig.loggedIn ? window.msn.igLogout() : window.msn.igLogin()) },
       ...(ais.length ? [{ sep: true }] : []),
       ...ais.map((p) => ({ label: `Mostrar ${p.name} na lista`, action: () => setAiEnabled([...on, p.id]) })),
@@ -1194,6 +1195,39 @@
     overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
     document.body.appendChild(overlay);
     form.num.focus();
+  }
+
+  // Instagram: a conversation with @someone not in the list yet
+  function addInstagramContact() {
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <form class="xp-dialog">
+        <div class="xp-dialog-title">Conversar no Instagram</div>
+        <div class="xp-dialog-body" style="flex-direction:column;gap:6px">
+          Nome de usuário:
+          <input type="text" name="user" placeholder="@usuario" style="width:200px;height:22px;padding:0 4px">
+          <span class="err" style="color:#c00"></span>
+        </div>
+        <div class="xp-dialog-buttons">
+          <button class="wlm-button" type="submit">Conversar</button>
+          <button class="wlm-button" type="button" data-cancel>Cancelar</button>
+        </div>
+      </form>`;
+    const form = overlay.querySelector('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const user = form.user.value.trim();
+      if (!user) return;
+      form.querySelector('.err').textContent = 'Procurando...';
+      const r = await window.msn.igStartChat(user);
+      if (r?.error) { form.querySelector('.err').textContent = r.error; return; }
+      overlay.remove();
+      window.msn.openChat(r.jid);
+    });
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    form.user.focus();
   }
 
   document.getElementById('webSearch').addEventListener('submit', (e) => {

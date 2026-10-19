@@ -822,6 +822,7 @@ ig.on('login', (st) => broadcast('ig:login', st));
 ipcMain.handle('ig:status', () => ig.status());
 ipcMain.handle('ig:login', () => ig.login());
 ipcMain.handle('ig:logout', () => ig.logout());
+ipcMain.handle('ig:startChat', (_e, user) => ig.startChat(user).then((jid) => ({ jid }), (e) => ({ error: e?.message || String(e) })));
 // reel/post links in any chat: still + video through my Instagram session
 ipcMain.handle('ig:linkPreview', (_e, url) => ig.linkPreview(url).catch(() => null));
 ipcMain.handle('ig:thumb', (_e, id) => ig.thumb(id).catch(() => null));

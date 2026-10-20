@@ -415,6 +415,7 @@ class TelegramService extends EventEmitter {
     if (m.photo) return 'image';
     if (m.sticker && !/tgs|webm/.test(m.file?.mimeType || '')) return 'sticker';
     if ((m.video || m.gif) && !m.videoNote) return 'video';
+    if (m.voice || m.audio) return 'audio';
     return null;
   }
 
@@ -423,7 +424,7 @@ class TelegramService extends EventEmitter {
     const caption = m.message || '';
     const media = this._inlineMedia(m);
     const label = media ? '' : this._mediaLabel(m);
-    const text = media ? caption || (media === 'video' ? '\u{1F3AC} <vídeo>' : '\u{1F4F7} <foto>') : caption && label ? `${label}\n${caption}` : caption || label;
+    const text = media ? caption || (media === 'video' ? '\u{1F3AC} <vídeo>' : media === 'audio' ? '\u{1F3B5} <áudio>' : '\u{1F4F7} <foto>') : caption && label ? `${label}\n${caption}` : caption || label;
     if (media) this.rawMedia.set(`${jid}:${m.id}`, m);
     const name = m.out ? null : (this._entityName(sender) || undefined);
     const ui = {
@@ -437,7 +438,7 @@ class TelegramService extends EventEmitter {
       // the group window reads the author from senderNick
       senderNick: name,
       senderJid: sender?.id != null ? `${JID_PREFIX}${String(sender.id?.value ?? sender.id)}` : undefined,
-      ...(media ? { media, caption: caption || undefined, duration: m.video?.attributes?.find?.((a) => a.duration)?.duration, gif: !!m.gif || undefined } : {}),
+      ...(media ? { media, caption: caption || undefined, duration: (m.video || m.voice || m.audio)?.attributes?.find?.((a) => a.duration)?.duration, gif: !!m.gif || undefined, waveform: this._waveform(m) } : {}),
       quote: this._quoteOf(jid, m),
     };
     // remembered so replies to it can show what they quote
@@ -498,7 +499,7 @@ class TelegramService extends EventEmitter {
   }
 
   _mediaFile(id, m) {
-    const ext = m.photo ? 'jpg' : m.sticker ? 'webp' : 'mp4';
+    const ext = m.photo ? 'jpg' : m.sticker ? 'webp' : m.voice ? 'ogg' : m.audio ? (/mpeg|mp3/.test(m.file?.mimeType || '') ? 'mp3' : /mp4|m4a|aac/.test(m.file?.mimeType || '') ? 'm4a' : 'ogg') : 'mp4';
     return path.join(this.mediaDir, `${String(id).replace(/[^\w-]/g, '')}.${ext}`);
   }
 
@@ -526,6 +527,34 @@ class TelegramService extends EventEmitter {
       if (process.env.MSN_DEBUG) console.log('[tg] media download failed:', e?.message);
       return null;
     }
+  }
+
+  /** Telegram packs a voice note's waveform as 5-bit values: unpack to 0..255. */
+  _waveform(m) {
+    const w = m.voice?.attributes?.find?.((a) => a.waveform)?.waveform;
+    if (!w?.length) return undefined;
+    const out = [];
+    const bits = w.length * 8;
+    for (let i = 0; i + 5 <= bits && out.length < 100; i += 5) {
+      const byte = i >> 3;
+      const v = ((w[byte] | ((w[byte + 1] || 0) << 8)) >> (i & 7)) & 31;
+      out.push(Math.round((v / 31) * 255));
+    }
+    return out;
+  }
+
+  /** A voice clip (Ogg/Opus) as a Telegram voice message. */
+  async sendVoice(jid, ogg, seconds) {
+    const { CustomFile } = require('telegram/client/uploads');
+    const { Api } = require('telegram');
+    const ent = await this._entity(jid);
+    const file = new CustomFile('clipe.ogg', ogg.length, '', ogg);
+    const sent = await this.client.sendFile(ent, {
+      file,
+      voiceNote: true,
+      attributes: [new Api.DocumentAttributeAudio({ voice: true, duration: seconds })],
+    });
+    return this._toUi(jid, sent);
   }
 
   /** Send a picture (pasted/drawn) as a Telegram photo. */

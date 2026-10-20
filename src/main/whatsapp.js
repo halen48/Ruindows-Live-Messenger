@@ -358,6 +358,15 @@ class WhatsAppService extends EventEmitter {
     return this._toUiMessage(sent);
   }
 
+  /** A voice clip (Ogg/Opus) as a WhatsApp voice note. */
+  async sendVoice(jid, ogg, seconds) {
+    const sent = await this.sock.sendMessage(jid, { audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: true, seconds });
+    this._rememberSent(sent);
+    this._storeMessage(sent, { silent: false });
+    this._scheduleSave();
+    return this._toUiMessage(sent);
+  }
+
   async sendFile(jid, filePath) {
     const fileName = path.basename(filePath);
     const ext = path.extname(fileName).toLowerCase();
@@ -486,7 +495,7 @@ class WhatsAppService extends EventEmitter {
   /** The already-downloaded file for a message, without downloading. */
   cachedMedia(id) {
     if (!this.mediaDir) return null;
-    for (const ext of ['jpg', 'webp', 'mp4']) {
+    for (const ext of ['jpg', 'webp', 'mp4', 'ogg']) {
       const file = path.join(this.mediaDir, `${String(id).replace(/[^\w-]/g, '')}.${ext}`);
       if (fs.existsSync(file)) return file;
     }
@@ -500,7 +509,7 @@ class WhatsAppService extends EventEmitter {
     for (const wrap of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2']) {
       if (inner[wrap]?.message) inner = inner[wrap].message;
     }
-    const ext = inner.stickerMessage ? 'webp' : inner.videoMessage ? 'mp4' : 'jpg';
+    const ext = inner.stickerMessage ? 'webp' : inner.videoMessage ? 'mp4' : inner.audioMessage ? 'ogg' : 'jpg';
     const file = path.join(this.mediaDir, `${id.replace(/[^\w-]/g, '')}.${ext}`);
     if (fs.existsSync(file)) return this._used(file);
     try {
@@ -1009,7 +1018,7 @@ class WhatsAppService extends EventEmitter {
       m.videoMessage?.caption ||
       (m.imageMessage && '\u{1F4F7} <foto>') ||
       (m.videoMessage && '\u{1F3AC} <video>') ||
-      (m.audioMessage && '\u{1F3B5} <voice message>') ||
+      (m.audioMessage && '\u{1F3B5} <áudio>') ||
       (m.stickerMessage && '<figurinha>') ||
       (m.documentMessage && `\u{1F4CE} <file: ${m.documentMessage.fileName || 'document'}>`) ||
       null
@@ -1029,8 +1038,10 @@ class WhatsAppService extends EventEmitter {
     for (const wrap of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'documentWithCaptionMessage']) {
       if (m[wrap]?.message) m = m[wrap].message;
     }
-    const media = m.imageMessage ? 'image' : m.stickerMessage ? 'sticker' : m.videoMessage ? 'video' : null;
+    const media = m.imageMessage ? 'image' : m.stickerMessage ? 'sticker' : m.videoMessage ? 'video' : m.audioMessage ? 'audio' : null;
     const thumb = m.videoMessage?.jpegThumbnail;
+    // voice notes carry their own 64-bar waveform
+    const wave = m.audioMessage?.waveform;
     return {
       id: msg.key.id,
       chatJid: this._canonChat(jid),
@@ -1046,7 +1057,8 @@ class WhatsAppService extends EventEmitter {
       caption: m.imageMessage?.caption || m.videoMessage?.caption || null,
       // tiny still WhatsApp embeds in every video, shown before downloading it
       thumb: thumb && thumb.length ? `data:image/jpeg;base64,${Buffer.from(thumb).toString('base64')}` : null,
-      duration: m.videoMessage?.seconds || null,
+      duration: m.videoMessage?.seconds || m.audioMessage?.seconds || null,
+      waveform: wave && wave.length ? [...Buffer.from(wave)] : undefined,
       // WhatsApp's GIFs are short mp4s flagged to loop silently
       gif: !!m.videoMessage?.gifPlayback || undefined,
       quote: this._quoteOf(m, jid),

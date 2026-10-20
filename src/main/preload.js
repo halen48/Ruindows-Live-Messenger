@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('msn', {
   sendImage: (jid, dataUrl) => ipcRenderer.invoke('wa:sendImage', { jid, dataUrl }),
   sendFile: (jid) => ipcRenderer.invoke('wa:sendFile', jid),
   sendBlob: (jid, name, dataUrl) => ipcRenderer.invoke('wa:sendBlob', { jid, name, dataUrl }),
+  sendVoice: (jid, bytes) => ipcRenderer.invoke('wa:sendVoice', { jid, bytes }),
+  saveMedia: (id, name) => ipcRenderer.invoke('wa:saveMedia', { id, name }),
   signOut: () => ipcRenderer.invoke('wa:signOut'),
 
   openChat: (jid) => ipcRenderer.send('ui:openChat', jid),

@@ -545,6 +545,18 @@ ipcMain.handle('wa:media', async (_e, id) => {
   const file = netFor(id) ? await netFor(id).getMedia(id) : await wa.getMedia?.(id);
   return file ? require('url').pathToFileURL(file).href : null;
 });
+// "Salvar" on a voice clip (or any downloaded media)
+ipcMain.handle('wa:saveMedia', async (e, { id, name }) => {
+  const file = netFor(id) ? await netFor(id).getMedia(id) : await wa.getMedia?.(id);
+  if (!file) return false;
+  const ext = path.extname(file);
+  const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), {
+    defaultPath: path.join(app.getPath('downloads'), `${String(name || 'clipe-de-voz').replace(/[^\w\- ]/g, '_')}${ext}`),
+  });
+  if (canceled || !filePath) return false;
+  fs.copyFileSync(file, filePath);
+  return true;
+});
 ipcMain.handle('ui:getStatus', () => myStatus);
 ipcMain.handle('wa:stickers', () => wa.getStickers?.() || { favorites: [], recent: [] });
 ipcMain.handle('wa:stickerFile', async (_e, ref) => {
@@ -725,6 +737,13 @@ ipcMain.handle('wa:sendImage', (_e, { jid, dataUrl }) => {
 // a file pasted with Ctrl+V (copied in the file manager, or a non-image blob):
 // it only exists as bytes in the renderer, so park it in a temp file named
 // like the original and send it through the normal file path
+// voice clip recorded in the chat window (WebM/Opus) -> Ogg voice note
+ipcMain.handle('wa:sendVoice', async (_e, { jid, bytes }) => {
+  const { webmToOgg } = require('./ogg-opus');
+  const { ogg, seconds } = webmToOgg(Buffer.from(bytes));
+  if (AiService.isAiJid(jid)) throw new Error('não disponível para IAs');
+  return netFor(jid) ? netFor(jid).sendVoice(jid, ogg, seconds) : wa.sendVoice(jid, ogg, seconds);
+});
 ipcMain.handle('wa:sendBlob', async (_e, { jid, name, dataUrl }) => {
   const safe = path.basename(String(name || 'arquivo')).replace(/[^\w.\- ()]/g, '_') || 'arquivo';
   const dir = fs.mkdtempSync(path.join(app.getPath('temp'), 'whatsmsn-paste-'));

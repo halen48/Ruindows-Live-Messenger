@@ -124,6 +124,24 @@
   .msg-block .reply-link:hover { text-decoration: underline; }
   #replyBar { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border: 1px solid #c5d3e3; border-bottom: 0; background: #eef3f9; color: #5b5b5b; }
   #replyBar[hidden] { display: none; }
+  /* voice clip being recorded (hold F2 or the clip button) */
+  #recBar { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border: 1px solid #c5d3e3; border-bottom: 0; background: #fff4f4; color: #5b5b5b; }
+  #recBar[hidden] { display: none; }
+  #recBar .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #d42020; animation: recBlink 1s steps(2) infinite; }
+  #recBar .rec-time { font-variant-numeric: tabular-nums; color: #b01010; font-weight: bold; }
+  @keyframes recBlink { 50% { opacity: .25; } }
+  /* voice clip player: WhatsApp's layout, Messenger's colors */
+  .voice { font: normal 12px var(--wlm-font); color: var(--wlm-text); display: flex; align-items: center; gap: 8px; width: 290px; max-width: 100%; margin: 3px 0; padding: 5px 8px 5px 5px; border: 1px solid #c5d6e8; border-radius: 6px; background: linear-gradient(180deg, #fbfdff, #e9f2fb); }
+  .voice .vp-play { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid #5d8fc4; background: linear-gradient(180deg, #8cc2f1, #3a7cc4); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
+  .voice .vp-play:hover { background: linear-gradient(180deg, #a3d0f6, #4b8dd4); }
+  .voice .vp-body { flex: 1; min-width: 0; }
+  .voice canvas { display: block; width: 100%; height: 24px; cursor: pointer; }
+  .voice .vp-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: #6b7c8f; }
+  .voice .vp-time { font-variant-numeric: tabular-nums; }
+  .voice .vp-speed { margin-left: auto; padding: 0 5px; border-radius: 8px; background: #d5e4f3; color: #2a5d93; cursor: pointer; font-weight: bold; }
+  .voice .vp-save { color: var(--wlm-link); cursor: pointer; }
+  .voice .vp-save:hover { text-decoration: underline; }
+  .voice .vp-icon { flex: none; width: 16px; height: 16px; opacity: .85; }
   #replyBar .rb-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #replyBar .rb-close { cursor: pointer; padding: 0 4px; color: #6d6d6d; }
   #replyBar .rb-close:hover { color: #c00; }
@@ -384,7 +402,7 @@
         <div class="fb" id="emoBtn" title="Selecionar um emoticon"><img src="assets/wlm85/chat-emoticon.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
         <div class="fb unavailable" title="Enviar um wink"><img src="assets/wlm85/chat-winks.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
         <div class="fb" id="nudgeBtn" title="Chamar a atenção"><img src="assets/wlm85/chat-tilt.png" alt="" style="width:24px"></div>
-        <div class="fb unavailable" title="Clipe de voz"><img src="assets/wlm85/chat-voice.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
+        <div class="fb" id="voiceBtn" title="Clipe de voz: segure este botão ou F2 para gravar, solte para enviar"><img src="assets/wlm85/chat-voice.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
         <div class="spacer"></div>
         <div class="fb" id="fontBtn" title="Alterar a fonte"><span style="font-family:'Times New Roman',serif;font-weight:bold;font-size:15px;color:#2a5d93">A</span><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
         <div class="fb unavailable" title="Alterar o plano de fundo"><img src="assets/wlm85/chat-bg.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
@@ -392,6 +410,7 @@
 
       <div id="replyBar" hidden><span class="rb-text" id="replyText"></span><span class="rb-close" id="replyClose" title="Cancelar resposta">✕</span></div>
       <div id="attachBar" hidden></div>
+      <div id="recBar" hidden><span class="rec-dot"></span><span>Gravando clipe de voz</span><span class="rec-time" id="recTime">0:00</span><span style="margin-left:auto">solte para enviar · Esc cancela</span></div>
       <div class="input-box" id="inputRow">
         <textarea id="input" spellcheck="false"></textarea>
         <canvas id="inkCanvas" height="68"></canvas>
@@ -707,6 +726,153 @@
     }, { once: true });
   }
 
+  /* ---- voice clips ---- */
+  const fmtClock = (s) => `${Math.floor((s || 0) / 60)}:${String(Math.floor((s || 0) % 60)).padStart(2, '0')}`;
+  let playingClip = null; // one clip at a time, like WhatsApp
+
+  // like Messenger: nothing plays until Reproduzir is pressed
+  function loadAudio(m, holder) {
+    const box = document.createElement('div');
+    box.className = 'voice';
+    box.innerHTML = `<button class="vp-play" title="Reproduzir">▶</button>
+      <div class="vp-body"><canvas width="400" height="48"></canvas>
+        <div class="vp-meta"><span class="vp-time">${fmtClock(m.duration)}</span><span class="vp-save">Salvar</span><span class="vp-speed" title="Velocidade">1x</span></div></div>
+      <img class="vp-icon" src="assets/wlm85/chat-voice.png" alt="">`;
+    holder.prepend(box);
+    const btn = box.querySelector('.vp-play');
+    const canvas = box.querySelector('canvas');
+    const timeEl = box.querySelector('.vp-time');
+    const speedEl = box.querySelector('.vp-speed');
+    let bars = m.waveform?.length ? resample(m.waveform, 48) : new Array(48).fill(40);
+    let audio = null;
+    let rate = 1;
+
+    function resample(src, n) {
+      const out = [];
+      for (let i = 0; i < n; i++) out.push(src[Math.floor((i * src.length) / n)] || 0);
+      return out;
+    }
+    function draw() {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height, step = w / bars.length;
+      const done = audio && audio.duration ? audio.currentTime / audio.duration : 0;
+      ctx.clearRect(0, 0, w, h);
+      bars.forEach((v, i) => {
+        const bh = Math.max(4, (v / 255) * (h - 4));
+        ctx.fillStyle = (i + 0.5) / bars.length <= done ? '#2f74c0' : '#a9c3de';
+        ctx.fillRect(i * step + 1, (h - bh) / 2, Math.max(2, step - 3), bh);
+      });
+      if (audio) { // the dot where it's at
+        ctx.fillStyle = '#2f74c0';
+        ctx.beginPath(); ctx.arc(Math.max(6, done * w), h / 2, 6, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    draw();
+
+    async function load() {
+      btn.textContent = '…';
+      const src = await window.msn.media(m.id).catch(() => null);
+      if (!src) { btn.textContent = '!'; btn.title = 'Áudio indisponível'; return null; }
+      const a = new Audio(src);
+      a.playbackRate = rate;
+      a.addEventListener('timeupdate', () => { timeEl.textContent = fmtClock(a.currentTime); draw(); });
+      a.addEventListener('pause', () => { btn.textContent = '▶'; btn.title = 'Reproduzir'; });
+      a.addEventListener('play', () => { btn.textContent = '❚❚'; btn.title = 'Pausar'; });
+      a.addEventListener('ended', () => { a.currentTime = 0; timeEl.textContent = fmtClock(a.duration || m.duration); draw(); });
+      a.addEventListener('loadedmetadata', () => { if (!m.duration && isFinite(a.duration)) timeEl.textContent = fmtClock(a.duration); });
+      // no waveform from the network: draw the real one from the file
+      if (!m.waveform?.length) {
+        fetch(src).then((r) => r.arrayBuffer()).then((buf) => new OfflineAudioContext(1, 1, 48000).decodeAudioData(buf)).then((dec) => {
+          const d = dec.getChannelData(0), n = 48, size = Math.floor(d.length / n) || 1, peaks = [];
+          for (let i = 0; i < n; i++) { let p = 0; for (let k = i * size; k < (i + 1) * size && k < d.length; k++) p = Math.max(p, Math.abs(d[k])); peaks.push(p); }
+          const top = Math.max(...peaks) || 1;
+          bars = peaks.map((p) => Math.round((p / top) * 255));
+          draw();
+        }).catch(() => {});
+      }
+      return a;
+    }
+
+    btn.addEventListener('click', async () => {
+      if (!audio) audio = await load();
+      if (!audio) return;
+      if (audio.paused) {
+        if (playingClip && playingClip !== audio) playingClip.pause();
+        playingClip = audio;
+        audio.play().catch(() => {});
+      } else audio.pause();
+    });
+    canvas.addEventListener('click', async (e) => {
+      if (!audio) { audio = await load(); if (!audio) return; }
+      const seek = () => { audio.currentTime = (e.offsetX / canvas.clientWidth) * audio.duration; draw(); };
+      if (isFinite(audio.duration)) seek(); else audio.addEventListener('loadedmetadata', seek, { once: true });
+    });
+    speedEl.addEventListener('click', () => {
+      rate = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+      speedEl.textContent = `${rate}x`;
+      if (audio) audio.playbackRate = rate;
+    });
+    box.querySelector('.vp-save').addEventListener('click', () => {
+      window.msn.saveMedia(m.id, `clipe de voz ${new Date(m.timestamp).toLocaleString('pt-BR').replace(/[/:]/g, '-')}`);
+    });
+  }
+
+  // recording: hold F2 (Messenger's shortcut) or the clip button; release sends
+  const recBar = document.getElementById('recBar');
+  const REC_HTML = recBar.innerHTML;
+  let rec = null;
+  // a problem with the clip, shown for a moment where the recording was
+  function voiceNotice(text) {
+    recBar.textContent = `⚠ ${text}`;
+    recBar.hidden = false;
+    setTimeout(() => { if (!rec) recBar.hidden = true; }, 5000);
+  }
+  async function startRec() {
+    if (rec || jid.startsWith('ai:')) return;
+    rec = { cancelled: false };
+    const mine = rec;
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { rec = null; voiceNotice('Não consegui usar o microfone.'); return; }
+    if (mine.cancelled || rec !== mine) { stream.getTracks().forEach((t) => t.stop()); return; }
+    const r = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    const parts = [];
+    r.ondataavailable = (e) => e.data.size && parts.push(e.data);
+    r.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      clearInterval(mine.timer);
+      recBar.hidden = true;
+      if (mine.cancelled || Date.now() - mine.started < 700) return; // too short: a tap, not a clip
+      const bytes = new Uint8Array(await new Blob(parts).arrayBuffer());
+      window.msn.sendVoice(jid, bytes).then(appendMessage).catch((e) => voiceNotice(`O clipe de voz não foi enviado: ${String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`));
+    };
+    mine.recorder = r;
+    mine.started = Date.now();
+    r.start(250);
+    recBar.innerHTML = REC_HTML;
+    recBar.hidden = false;
+    const tick = () => { document.getElementById('recTime').textContent = fmtClock((Date.now() - mine.started) / 1000); };
+    tick();
+    mine.timer = setInterval(tick, 250);
+  }
+  function stopRec(cancel) {
+    if (!rec) return;
+    const r = rec;
+    rec = null;
+    r.cancelled = !!cancel;
+    if (r.recorder?.state === 'recording') r.recorder.stop();
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'F2' && !e.repeat && editor.hidden) { e.preventDefault(); startRec(); }
+    else if (e.key === 'Escape' && rec) { e.preventDefault(); stopRec(true); }
+  });
+  document.addEventListener('keyup', (e) => { if (e.key === 'F2') { e.preventDefault(); stopRec(false); } });
+  const voiceBtn = document.getElementById('voiceBtn');
+  voiceBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startRec(); });
+  document.addEventListener('pointerup', () => { if (rec) stopRec(false); });
+  window.addEventListener('blur', () => { if (rec) stopRec(false); });
+  if (jid.startsWith('ai:')) voiceBtn.classList.add('unavailable');
+
   // photos load on their own unless "baixar mídia automaticamente" is off;
   // stickers are tiny and always load
   let autoDownload = true;
@@ -715,6 +881,7 @@
 
   async function loadMedia(m, holder) {
     if (m.media === 'video') return loadVideo(m, holder);
+    if (m.media === 'audio') return loadAudio(m, holder);
     const placeholder = document.createElement('div');
     placeholder.textContent = m.media === 'sticker' ? '<figurinha>' : '📷 Carregando foto...';
     holder.prepend(placeholder);

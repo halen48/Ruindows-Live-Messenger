@@ -308,6 +308,8 @@ class InstagramService extends EventEmitter {
 
   getRoster() { return this.chats; }
 
+  async sendVoice() { throw new Error('clipe de voz no Instagram ainda não funciona'); }
+
   /**
    * Answer the bubble showing `text` (the newest one with it) the way I
    * would: hover it for real, then press its own "reply" button.

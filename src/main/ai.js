@@ -693,7 +693,8 @@ class AiService extends EventEmitter {
 
   _loadGroups() {
     try {
-      return JSON.parse(fs.readFileSync(this.groupsFile, 'utf8'));
+      // older saves kept a dead "running" ({}) that froze the group
+      return JSON.parse(fs.readFileSync(this.groupsFile, 'utf8')).map(({ running, ...g }) => g);
     } catch {
       return [];
     }
@@ -703,7 +704,8 @@ class AiService extends EventEmitter {
     if (!this.groupsFile) return;
     try {
       const tmp = this.groupsFile + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(this.groups));
+      // "running" is the round in progress (a promise): not something to keep
+      fs.writeFileSync(tmp, JSON.stringify(this.groups, (k, v) => (k === 'running' ? undefined : v)));
       fs.renameSync(tmp, this.groupsFile);
     } catch {
       /* non-fatal */
@@ -862,7 +864,7 @@ class AiService extends EventEmitter {
     g.messages.push(mine);
     this._saveGroups();
     // a message sent while they're still answering goes in the next round
-    (g.running || Promise.resolve()).then(() => this._round(g));
+    (typeof g.running?.then === 'function' ? g.running : Promise.resolve()).then(() => this._round(g));
     return mine;
   }
 

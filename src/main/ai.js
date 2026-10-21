@@ -239,7 +239,8 @@ const PROVIDERS = {
     send: null, // Enter sends
     busy: null,
     idFromUrl: (url) => url.match(/\/s\/([\w-]+)/)?.[1] || null,
-    loggedIn: `(() => { try { return !!JSON.parse(localStorage.getItem('userToken')).value; } catch { return false; } })()`,
+    // an expired token stays saved: the site sending me to sign_in is what counts
+    loggedIn: `(() => { try { return !location.pathname.startsWith('/sign_in') && !!JSON.parse(localStorage.getItem('userToken')).value; } catch { return false; } })()`,
     list: `(async () => {
       const t = JSON.parse(localStorage.getItem('userToken')).value;
       const j = await (await fetch('/api/v0/chat_session/fetch_page?count=40', { headers: { Authorization: 'Bearer ' + t } })).json();
@@ -510,6 +511,17 @@ class AiService extends EventEmitter {
       let conversations = [];
       try {
         loggedIn = !!(await this._eval(win, p.loggedIn));
+        // Google drops the copied session once Firefox rotates its cookies:
+        // copy them again (at most every 30 min) and look once more
+        if (!loggedIn && id === 'gemini' && Date.now() - (this.lastAutoImport || 0) > 30 * 60 * 1000 && (await firefoxHasGoogle().catch(() => false))) {
+          this.lastAutoImport = Date.now();
+          await importFirefoxLogin(session.fromPartition(AI_PARTITION)).catch(() => null);
+          // same address: _go would skip it, and the page must reload with the new cookies
+          await win.loadURL(p.home).catch(() => {});
+          await this._loaded(win);
+          await new Promise((r) => setTimeout(r, 2500));
+          loggedIn = !!(await this._eval(win, p.loggedIn));
+        }
         if (loggedIn) {
           if (id === 'gemini') await this._go(win, p.home);
           conversations = ((await this._eval(win, p.list)) || []).map((c) => ({

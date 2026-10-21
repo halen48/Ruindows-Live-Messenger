@@ -108,7 +108,9 @@ class TelegramService extends EventEmitter {
       new StringSession(this.state.session || ''),
       this._apiId(),
       this._apiHash(),
-      { connectionRetries: 5, deviceModel: 'Ruindows Live Messenger', appVersion: '8.5', useWSS: false }
+      // over secure WebSocket (port 443), like Telegram Web: networks that
+      // filter non-HTTPS traffic left the plain connection hanging forever
+      { connectionRetries: 5, deviceModel: 'Ruindows Live Messenger', appVersion: '8.5', useWSS: true }
     );
   }
 
@@ -204,7 +206,12 @@ class TelegramService extends EventEmitter {
       this._save();
     }
     if (!this.configured()) throw new Error('faltam o api_id e o api_hash (pegue em my.telegram.org)');
-    if (this.login) throw new Error('já tem um login em andamento');
+    // a previous attempt left hanging (window closed, network dropped): start over
+    if (this.login) {
+      const old = this.client;
+      this.login = null;
+      old?.disconnect().catch(() => {});
+    }
 
     this.client = this._newClient();
     const password = defer();

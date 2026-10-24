@@ -778,6 +778,36 @@
   }
 
   // where downloaded photos/videos/stickers live and when they're cleaned up
+  // what "Chamar a atenção" sends: one message per line, the first is the
+  // button's; the arrow next to it in the conversation picks any of them
+  async function nudgeOptions() {
+    const texts = await window.msn.nudgeTexts();
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-dialog-overlay';
+    overlay.innerHTML = `
+      <form class="xp-dialog">
+        <div class="xp-dialog-title">Opções do chamar a atenção</div>
+        <div class="xp-dialog-body" style="flex-direction:column;gap:6px;align-items:stretch">
+          Mensagens enviadas ao chamar a atenção (uma por linha).<br>A primeira é a do botão; a setinha ao lado dele escolhe outra.
+          <textarea name="texts" rows="6" style="width:260px;resize:vertical;font:inherit;padding:3px"></textarea>
+        </div>
+        <div class="xp-dialog-buttons">
+          <button class="wlm-button" type="submit">OK</button>
+          <button class="wlm-button" type="button" data-cancel>Cancelar</button>
+        </div>
+      </form>`;
+    const form = overlay.querySelector('form');
+    form.texts.value = texts.join('\n');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await window.msn.setNudgeTexts(form.texts.value.split('\n'));
+      overlay.remove();
+    });
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    form.texts.focus();
+  }
+
   async function mediaOptions() {
     const o = await window.msn.getMediaOptions();
     const mb = (b) => (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
@@ -1011,6 +1041,7 @@
       { label: 'Alterar nome de exibição...', action: editNick },
       { sep: true },
       { label: 'Opções de mídia...', action: mediaOptions },
+      { label: 'Opções do chamar a atenção...', action: nudgeOptions },
       { label: 'Tema...', action: themeMenu },
       { label: 'Atualizar conversas das IAs', action: () => window.msn.aiRefresh() },
       { sep: true },

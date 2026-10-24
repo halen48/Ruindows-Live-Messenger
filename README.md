@@ -30,6 +30,15 @@ que era MSN 6 de XP, e foi promovido a 8.5 de Vista porque a gente tem padrão.
 > **Os gráficos, sons e fontes do WLM 8.5 não vêm no repositório.** São da
 > Microsoft e o Bill Gates tem advogado. Ficam em `src/renderer/assets/wlm85/`
 > e `vendor/` (no `.gitignore`), pra quem tiver os seus.
+>
+> Pra guardar os seus num lugar seu (e não perder num clone novo):
+>
+> ```sh
+> scripts/assets-privados.sh exportar            # ~/Documentos/WhatsMSN-assets-privados-<data>.zip
+> scripts/assets-privados.sh importar arquivo.zip
+> ```
+>
+> O zip fica fora do repositório. Uso pessoal, não sobe pro GitHub.
 
 ## O que tem
 

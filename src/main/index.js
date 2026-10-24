@@ -133,6 +133,7 @@ function attachScreenshot(win, name) {
 
 function createLoginWindow() {
   loginWin = new BrowserWindow({ ...baseWindowOptions(300, 640), resizable: false });
+  hideToTrayOnClose(loginWin, () => loginWin);
   loginWin.loadFile(path.join(RENDERER, 'login.html'));
   loginWin.once('ready-to-show', () => loginWin?.show());
   attachScreenshot(loginWin, 'login');
@@ -142,8 +143,23 @@ function createLoginWindow() {
   });
 }
 
+// Like Messenger and WhatsApp desktop: the X on the sign-in window or the
+// buddy list only hides it to the tray; "Sair" in the tray menu quits. When
+// the app itself replaces the window (after signing in, on log out) it clears
+// buddyWin/loginWin first, and that close goes through.
+let quitting = false;
+app.on('before-quit', () => { quitting = true; });
+function hideToTrayOnClose(win, current) {
+  win.on('close', (e) => {
+    if (quitting || !tray || current() !== win) return;
+    e.preventDefault();
+    win.hide();
+  });
+}
+
 function createBuddyListWindow() {
   buddyWin = new BrowserWindow(baseWindowOptions(330, 660));
+  hideToTrayOnClose(buddyWin, () => buddyWin);
   buddyWin.loadFile(path.join(RENDERER, 'buddylist.html'));
   buddyWin.once('ready-to-show', () => buddyWin?.show());
   attachScreenshot(buddyWin, 'buddylist');
@@ -697,11 +713,24 @@ const getMessagesPayload = (jid) => ({
 });
 ipcMain.handle('wa:send', (_e, { jid, text, quotedId }) =>
   netFor(jid) ? netFor(jid).send(jid, text, quotedId) : AiService.isAiJid(jid) ? ai.send(jid, text) : wa.sendText(jid, text, quotedId));
-ipcMain.handle('wa:nudge', async (_e, jid) => {
+// "Chamar a atenção" sends a message of my choosing (Opções do chamar a
+// atenção...); the first one in the list is what the button sends
+const nudgeTexts = () => {
+  const list = (Array.isArray(settings.nudgeTexts) ? settings.nudgeTexts : []).map((t) => String(t).trim()).filter(Boolean);
+  return list.length ? list : ['Alo'];
+};
+ipcMain.handle('ui:nudgeTexts', () => nudgeTexts());
+ipcMain.handle('ui:setNudgeTexts', (_e, list) => {
+  settings.nudgeTexts = (Array.isArray(list) ? list : []).map((t) => String(t).trim()).filter(Boolean).slice(0, 20);
+  saveSettings();
+  return nudgeTexts();
+});
+ipcMain.handle('wa:nudge', async (_e, jid, chosen) => {
   if (AiService.isAiJid(jid)) throw new Error('não disponível para IAs');
-  const win = chatWins.get(jid);
-  shakeWindow(win);
-  return wa.sendNudge(jid);
+  const text = nudgeTexts().includes(chosen) ? chosen : nudgeTexts()[0];
+  shakeWindow(chatWins.get(jid));
+  const sent = await (netFor(jid) ? netFor(jid).send(jid, text) : wa.sendText(jid, text));
+  return { ...sent, isNudge: true, nudgeText: text };
 });
 ipcMain.handle('wa:typing', (_e, { jid, composing }) => (netFor(jid) ? netFor(jid).setTyping(jid, composing) : AiService.isAiJid(jid) ? null : wa.setTyping(jid, composing)));
 ipcMain.handle('wa:setPresence', (_e, state) => wa.setMyPresence(state));

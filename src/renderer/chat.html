@@ -401,7 +401,7 @@
       <div class="fmt-bar">
         <div class="fb" id="emoBtn" title="Selecionar um emoticon"><img src="assets/wlm85/chat-emoticon.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
         <div class="fb unavailable" title="Enviar um wink"><img src="assets/wlm85/chat-winks.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
-        <div class="fb" id="nudgeBtn" title="Chamar a atenção"><img src="assets/wlm85/chat-tilt.png" alt="" style="width:24px"></div>
+        <div class="fb" id="nudgeBtn" title="Chamar a atenção"><img src="assets/wlm85/chat-tilt.png" alt="" style="width:24px"><img class="caret" id="nudgeCaret" src="assets/wlm85/chat-arrow.png" alt="" title="Escolher a mensagem"></div>
         <div class="fb" id="voiceBtn" title="Clipe de voz: segure este botão ou F2 para gravar, solte para enviar"><img src="assets/wlm85/chat-voice.png" alt=""><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
         <div class="spacer"></div>
         <div class="fb" id="fontBtn" title="Alterar a fonte"><span style="font-family:'Times New Roman',serif;font-weight:bold;font-size:15px;color:#2a5d93">A</span><img class="caret" src="assets/wlm85/chat-arrow.png" alt=""></div>
@@ -520,7 +520,7 @@
     if (m.isNudge) {
       el.className = 'nudge-block';
       el.textContent = m.fromMe
-        ? 'Você chamou a atenção.'
+        ? `Você chamou a atenção${m.nudgeText ? ` ("${m.nudgeText}")` : ''}.`
         : `${m.senderName} chamou a sua atenção!`;
     } else {
       el.className = 'msg-block';
@@ -1263,10 +1263,10 @@
     window.msn.send(jid, wrapFormatting(emoticonize(text)), quotedId).then(appendMessage);
   }
 
-  function sendNudge() {
+  function sendNudge(text) {
     if (isAi) return unavailable('Chamar a atenção');
     try { Sounds.nudge(); } catch {}
-    window.msn.nudge(jid).then(appendMessage);
+    window.msn.nudge(jid, typeof text === 'string' ? text : undefined).then(appendMessage);
   }
 
   // "Enviar arquivo": pick one or more, they go to the tray like a paste
@@ -1575,7 +1575,14 @@
 
   sendBtn.addEventListener('click', send);
   document.getElementById('sendFilesBtn').addEventListener('click', sendFile);
-  document.getElementById('nudgeBtn').addEventListener('click', sendNudge);
+  // the button sends the first message of the list; its arrow picks another
+  document.getElementById('nudgeBtn').addEventListener('click', async (e) => {
+    if (e.target.id !== 'nudgeCaret') return sendNudge();
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const texts = await window.msn.nudgeTexts();
+    Menus.popup(texts.map((t) => ({ label: t, action: () => sendNudge(t) })), r.left, r.bottom);
+  });
   document.getElementById('searchBtn').addEventListener('click', () => {
     const sel = String(window.getSelection()).trim();
     window.msn.openExternal(sel ? 'https://www.bing.com/search?q=' + encodeURIComponent(sel) : 'https://www.bing.com');
